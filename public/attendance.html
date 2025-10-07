@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feuille d'appel - PERMAPPEL</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Variables CSS manquantes pour cette page */
+        :root {
+            --surface-color: #ffffff;
+            --border-radius: 8px;
+            --transition: all 0.3s ease;
+            --shadow: 0 2px 4px rgba(0,0,0,0.1);
+            --shadow-lg: 0 4px 8px rgba(0,0,0,0.15);
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --background-color: #f8fafc;
+            --primary-color: #2563eb;
+            --warning-color: #f59e0b;
+        }
+
+        /* Styles spécifiques à la page de feuille d'appel */
+        .attendance-page {
+            min-height: 100vh;
+            background-color: var(--background-color);
+            padding: 1rem;
+        }
+        
+        .attendance-header {
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .attendance-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .attendance-info {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .info-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+        
+        .info-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .attendance-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        
+        .connected-users {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            position: relative;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: var(--border-radius);
+            transition: background-color 0.2s;
+        }
+        
+        .connected-users:hover {
+            background-color: var(--background-color);
+        }
+        
+        .connected-users i {
+            color: var(--success-color);
+        }
+        
+        .user-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 0.5rem;
+            min-width: 200px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        
+        .connected-users:hover .user-list {
+            display: block;
+        }
+        
+        .user-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+        
+        .user-item i {
+            color: var(--success-color);
+            font-size: 0.8rem;
+        }
+        
+        .user-item.self {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        
+        /* Styles pour les tags de groupes */
+        .groups-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        
+        .group-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .group-tag .remove-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 0.25rem;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        
+        .group-tag .remove-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .group-tag .remove-btn i {
+            font-size: 0.75rem;
+        }
+        
+        /* Styles pour les tags de classes identiques aux groupes */
+        .class-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .class-tag .remove-btn {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 0.25rem;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.2s;
+        }
+        
+        .class-tag .remove-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .class-tag .remove-btn i {
+            font-size: 0.75rem;
+        }
+        
+        /* Statistiques en haut */
+        .attendance-stats-header {
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow);
+        }
+        
+        .stats-container {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+        }
+        
+        .stat-item.total {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-left: auto;
+        }
+        
+        .stat-number {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        
+        .sync-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            font-size: 0.875rem;
+        }
+        
+        .sync-status.connected {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        
+        .sync-status.disconnected {
+            background-color: #fef2f2;
+            color: #dc2626;
+        }
+        
+        .attendance-content {
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        
+        .attendance-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            table-layout: auto;
+            min-width: 800px;
+        }
+        
+        .attendance-table th,
+        .attendance-table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: top;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .attendance-table th:first-child,
+        .attendance-table td:first-child {
+            text-align: left;
+        }
+        
+        .attendance-table th:last-child,
+        .attendance-table td:last-child {
+            text-align: left;
+            white-space: normal;
+        }
+        
+        .attendance-table th {
+            background-color: var(--background-color);
+            font-weight: 600;
+            color: var(--text-primary);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        /* Alignement responsif des colonnes du tableau */
+        .attendance-table th:first-child,
+        .attendance-table td:first-child {
+            min-width: 100px;
+            max-width: 120px;
+        }
+        
+        .attendance-table th:nth-child(2),
+        .attendance-table td:nth-child(2) {
+            min-width: 100px;
+            max-width: 120px;
+        }
+        
+        .attendance-table th:nth-child(3),
+        .attendance-table td:nth-child(3) {
+            min-width: 60px;
+            max-width: 80px;
+            text-align: center;
+        }
+        
+        .attendance-table th:nth-child(4),
+        .attendance-table td:nth-child(4) {
+            min-width: 80px;
+            max-width: 120px;
+        }
+        
+        .attendance-table th:nth-child(5),
+        .attendance-table td:nth-child(5) {
+            min-width: 80px;
+            max-width: 100px;
+        }
+        
+        .attendance-table th:nth-child(6),
+        .attendance-table td:nth-child(6) {
+            min-width: 100px;
+            max-width: 120px;
+            text-align: center;
+        }
+        
+        .attendance-table th:nth-child(7),
+        .attendance-table td:nth-child(7) {
+            min-width: 250px;
+            white-space: normal;
+        }
+        
+        .student-row {
+            display: table-row;  /* Assurer que les row prennent toute la largeur de leur table */
+            transition: background-color 0.2s ease;
+            width: 100%;
+        }
+        
+        .student-row:hover {
+            background-color: var(--background-color);
+        }
+        
+        .status-buttons {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .status-btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: var(--transition);
+            min-width: 80px;
+        }
+        
+        .status-btn.present {
+            background-color: var(--success-color);
+            color: white;
+        }
+        
+        .status-btn.absent {
+            background-color: var(--error-color);
+            color: white;
+        }
+        
+        .status-btn.cdi {
+            background-color: var(--warning-color);
+            color: white;
+        }
+        
+        .status-btn.excused {
+            background-color: var(--secondary-color);
+            color: white;
+        }
+        
+        .status-btn:hover {
+            opacity: 0.8;
+            transform: translateY(-1px);
+        }
+        
+        .status-btn.active {
+            box-shadow: 0 0 0 2px var(--primary-color);
+        }
+        
+        .attendance-summary {
+            background: var(--background-color);
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .summary-stats {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+        
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .stat-number {
+            font-weight: 600;
+            font-size: 1.25rem;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .loading-spinner {
+            background: var(--surface-color);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            text-align: center;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: var(--border-radius);
+            margin: 1rem 0;
+            border: 1px solid #fecaca;
+        }
+        
+        @media (max-width: 768px) {
+            .attendance-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .attendance-info {
+                justify-content: space-between;
+            }
+            
+            .attendance-actions {
+                justify-content: center;
+            }
+            
+            .attendance-table {
+                font-size: 0.875rem;
+            }
+            
+            .attendance-table th,
+            .attendance-table td {
+                padding: 0.75rem 0.5rem;
+            }
+            
+            .status-buttons {
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+            
+            .status-btn {
+                min-width: 60px;
+                padding: 0.375rem 0.75rem;
+                font-size: 0.75rem;
+            }
+        }
+        
+        /* Modal de vérification d'attendance */
+        .attendance-check-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+        
+        .attendance-check-content {
+            background: var(--surface-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .attendance-check-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.5rem 1.5rem 0 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .attendance-check-header i {
+            font-size: 1.5rem;
+            color: var(--warning-color);
+        }
+        
+        .attendance-check-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.2rem;
+        }
+        
+        .attendance-check-body {
+            padding: 1.5rem;
+        }
+        
+        .attendance-check-body p {
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+        
+        .unattended-list {
+            list-style: none;
+            padding: 0;
+            margin: 1rem 0;
+        }
+        
+        .unattended-list li {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: var(--background-color);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+        
+        .unattended-list li i {
+            color: var(--primary-color);
+        }
+        
+        .warning-text {
+            background: #fef3c7;
+            color: #92400e;
+            padding: 0.75rem;
+            border-radius: 6px;
+            border: 1px solid #fbbf24;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .warning-text i {
+            color: var(--warning-color);
+        }
+        
+        .attendance-check-footer {
+            padding: 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+        
+        .attendance-check-footer .btn {
+            padding: 0.75rem 1.5rem;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="attendance-page">
+        <!-- En-tête de la feuille d'appel -->
+        <div class="attendance-header">
+            <div class="attendance-title">
+                <i class="fas fa-clipboard-list"></i>
+                <span id="attendanceTitle">Feuille d'appel</span>
+            </div>
+            
+            <div class="attendance-info">
+                <div class="info-item">
+                    <span class="info-label">Date</span>
+                    <span class="info-value" id="attendanceDate">-</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Classes</span>
+                    <div class="info-value" id="attendanceClasses">
+                        <div class="classes-tags" id="classesTags">
+                            <!-- Les classes seront affichées ici sous forme de tags -->
+                        </div>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Groupes</span>
+                    <div class="info-value" id="attendanceGroups">
+                        <div class="groups-tags" id="groupsTags">
+                            <!-- Les groupes seront affichés ici sous forme de tags -->
+                        </div>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Heure</span>
+                    <span class="info-value" id="attendanceTime">-</span>
+                </div>
+            </div>
+            
+            <div class="attendance-actions">
+                <div class="connected-users" id="connectedUsers">
+                    <i class="fas fa-users"></i>
+                    <span>Utilisateurs connectés: <span id="userCount">0</span></span>
+                    <div class="user-list" id="userList"></div>
+                </div>
+                <button class="btn btn-primary" id="addGroupsBtn" onclick="showAddGroupsModal()">
+                    <i class="fas fa-plus"></i>
+                    Ajouter des groupes
+                </button>
+                <button class="btn btn-primary" id="addClassesBtn" onclick="showAddClassesModal()">
+                    <i class="fas fa-plus"></i>
+                    Ajouter des classes
+                </button>
+                <button class="btn btn-warning" onclick="showAttendanceCheckModal()">
+                    <i class="fas fa-check-circle"></i>
+                    Vérifier l'appel
+                </button>
+                <button class="btn btn-info" onclick="exportAttendancePDF()">
+                    <i class="fas fa-file-pdf"></i>
+                    Export PDF
+                </button>
+                <div class="sync-status" id="syncStatus">
+                    <i class="fas fa-circle"></i>
+                    <span>Connexion...</span>
+                </div>
+                <button class="btn btn-secondary" onclick="window.close()">
+                    <i class="fas fa-times"></i>
+                    Enregistrer
+                </button>
+            </div>
+        </div>
+        
+        <!-- Statistiques en haut -->
+        <div class="attendance-stats-header">
+            <div class="stats-container">
+                <div class="stat-item">
+                    <i class="fas fa-check-circle" style="color: var(--success-color);"></i>
+                    <span>Présents: <span class="stat-number" id="presentCount">0</span></span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-times-circle" style="color: var(--error-color);"></i>
+                    <span>Absents: <span class="stat-number" id="absentCount">0</span></span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-book" style="color: var(--warning-color);"></i>
+                    <span>CDI: <span class="stat-number" id="cdiCount">0</span></span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-user-check" style="color: var(--secondary-color);"></i>
+                    <span>Excusés: <span class="stat-number" id="excusedCount">0</span></span>
+                </div>
+                <div class="stat-item">
+                    <i class="fas fa-question-circle" style="color: var(--warning-color);"></i>
+                    <span>Non appelés: <span class="stat-number" id="unattendedCount">0</span></span>
+                </div>
+                <div class="stat-item total">
+                    <i class="fas fa-users" style="color: var(--primary-color);"></i>
+                    <span>Total: <span class="stat-number" id="totalCount">0</span> élèves</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Contenu de la feuille d'appel -->
+        <div class="attendance-content">
+            <div id="attendanceTableContainer">
+                <!-- Le tableau sera généré dynamiquement -->
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- Overlay de chargement -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Chargement de la feuille d'appel...</p>
+        </div>
+    </div>
+    
+    <!-- Message d'erreur -->
+    <div id="errorMessage" class="error-message" style="display: none;">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span id="errorText">Une erreur est survenue</span>
+    </div>
+    
+    <!-- Modal pour ajouter des groupes -->
+    <div id="addGroupsModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Ajouter des groupes</h3>
+                <button class="modal-close" onclick="hideAddGroupsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="add-groups-section">
+                    <h4>Sélectionner les groupes à ajouter</h4>
+                    <div class="groups-multiselect" id="availableGroupsList">
+                        <!-- Les groupes disponibles seront chargés ici -->
+                    </div>
+                    <button class="btn btn-primary add-groups-btn" onclick="addSelectedGroups()">
+                        <i class="fas fa-plus"></i>
+                        Ajouter les groupes sélectionnés
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal pour ajouter des classes -->
+    <div id="addClassesModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Ajouter des classes</h3>
+                <button class="modal-close" onclick="hideAddClassesModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="add-classes-section">
+                    <h4>Sélectionner les classes à ajouter</h4>
+                    <div class="classes-multiselect" id="availableClassesList">
+                        <!-- Les classes disponibles seront chargées ici -->
+                    </div>
+                    <button class="btn btn-primary add-classes-btn" onclick="addSelectedClasses()">
+                        <i class="fas fa-plus"></i>
+                        Ajouter les classes sélectionnées
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/attendance-window.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+
+PS C:\Program Files\PERMAPPEL> start PERMAPPEL.exe
+PS C:\Program Files\PERMAPPEL>
+���� D+�marrage du serveur PERMAPPEL...
+���� D+�marrage du serveur en arri+�re-plan...
+���� R+�pertoire actuel: C:\Program Files\PERMAPPEL\resources\app.asar
+���� Chemin serveur: C:\Program Files\PERMAPPEL\resources\app.asar\server\server.js
+���� Serveur existe: true
+ԣ� Application PERMAPPEL d+�marr+�e avec succ+�s
+ԣ� Serveur d+�marr+�, chargement de l'application
+���� Tentative d'import du serveur...
+���� Chemin base de donn+�es: C:\ProgramData\PERMAPPEL\permappel.db
+��ᴩ� Impossible de cr+�er le dossier uploads: ENOTDIR, not a directory
+��� Erreur lors du d+�marrage du serveur: Error: ENOTDIR, not a directory
+    at createError (node:electron/js2c/node_init:2:1750)
+    at t.mkdirSync (node:electron/js2c/node_init:2:12896)
+    at Function.sync (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\mkdirp\index.js:74:13)
+    at new DiskStorage (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\storage\disk.js:21:12)
+    at module.exports (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\storage\disk.js:65:10)
+    at new Multer (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\index.js:15:20)
+    at multer (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\index.js:95:12)
+    at Object.<anonymous> (C:\Program Files\PERMAPPEL\resources\app.asar\server\routes\import.js:9:16)
+    at Module._compile (node:internal/modules/cjs/loader:1271:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1326:10) {
+  code: 'ENOTDIR',
+  errno: -20
+}
+��� Stack trace: Error: ENOTDIR, not a directory
+    at createError (node:electron/js2c/node_init:2:1750)
+    at t.mkdirSync (node:electron/js2c/node_init:2:12896)
+    at Function.sync (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\mkdirp\index.js:74:13)
+    at new DiskStorage (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\storage\disk.js:21:12)
+    at module.exports (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\storage\disk.js:65:10)
+    at new Multer (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\index.js:15:20)
+    at multer (C:\Program Files\PERMAPPEL\resources\app.asar\server\node_modules\multer\index.js:95:12)
+    at Object.<anonymous> (C:\Program Files\PERMAPPEL\resources\app.asar\server\routes\import.js:9:16)
+    at Module._compile (node:internal/modules/cjs/loader:1271:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1326:10)
+ԣ� Base de donn+�es SQLite connect+�e
+ԣ� Tables cr+�+�es avec succ+�s
+ԣ� Donn+�es par d+�faut v+�rifi+�es
+(node:14244) electron: Failed to load URL: http://localhost:3001/ with error: ERR_CONNECTION_REFUSED
+(Use `PERMAPPEL --trace-warnings ...` to show where the warning was created)
+��� Erreur chargement URL: Error: ERR_CONNECTION_REFUSED (-102) loading 'http://localhost:3001/'
+    at rejectAndCleanup (node:electron/js2c/browser_init:2:73882)
+    at WebContents.failListener (node:electron/js2c/browser_init:2:74095)
+    at WebContents.emit (node:events:517:28) {
+  errno: -102,
+  code: 'ERR_CONNECTION_REFUSED',
+  url: 'http://localhost:3001/'
+}

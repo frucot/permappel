@@ -1,0 +1,21 @@
+{
+  "name": "permappel-server",
+  "version": "1.0.1",
+  "description": "Serveur PERMAPPEL",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "bcrypt": "latest",
+    "cors": "latest",
+    "csv-parser": "^3.2.0",
+    "express": "latest",
+    "multer": "^2.0.2",
+    "puppeteer": "latest",
+    "socket.io": "latest",
+    "sqlite3": "latest",
+    "winston": "latest"
+  }
+}

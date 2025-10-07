@@ -1,0 +1,65 @@
+{
+  "name": "permappel",
+  "version": "1.0.0",
+  "description": "Application d'appel d'élèves PERMAPPEL",
+  "main": "main.js",
+  "homepage": "./",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build-win": "electron-builder --win",
+    "build-portable": "electron-builder --win portable",
+    "build-installer": "electron-builder --win nsis",
+    "dev": "electron . --dev",
+    "server": "cd server && npm start",
+    "postinstall": "cd server && npm install",
+    "init-db": "node init-database.js",
+    "test": "node test-app.js",
+    "clean": "node cleanup.bat",
+    "create-icon": "node create-icon.js"
+  },
+  "build": {
+    "appId": "com.permappel.app",
+    "productName": "PERMAPPEL",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "public/**/*",
+      "server/**/*",
+      "!server/backups",
+      "!server/uploads"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "requestedExecutionLevel": "asInvoker",
+      "verifyUpdateCodeSignature": false,
+      "forceCodeSigning": false
+    },
+    "portable": {
+      "artifactName": "PERMAPPEL-${version}-Portable.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "forceCodeSigning": false
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "author": "PERMAPPEL Team",
+  "license": "MIT"
+}

@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PERMAPPEL - Application d'appel d'élèves</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        // Charger jsPDF de manière asynchrone pour éviter de bloquer le chargement de la page
+        function loadJsPDF() {
+            console.log('Chargement de jsPDF...');
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js';
+            script.onload = function() {
+                console.log('✅ jsPDF chargé depuis unpkg.com');
+            };
+            script.onerror = function() {
+                console.log('Tentative de chargement jsPDF depuis le fichier local...');
+                const localScript = document.createElement('script');
+                localScript.src = 'js/jspdf.umd.min.js';
+                localScript.onload = function() {
+                    console.log('✅ jsPDF chargé depuis le fichier local');
+                };
+                localScript.onerror = function() {
+                    console.error('❌ Impossible de charger jsPDF');
+                    window.jspdfError = true;
+                };
+                document.head.appendChild(localScript);
+            };
+            document.head.appendChild(script);
+        }
+        
+        // Charger jsPDF après le chargement de la page
+        window.addEventListener('load', function() {
+            setTimeout(loadJsPDF, 1000); // Attendre 1 seconde après le chargement de la page
+        });
+    </script>
+    <script src="js/config.js"></script>
+    <script>
+        // Vérifier le chargement de jsPDF au chargement de la page
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                if (typeof window.jspdf !== 'undefined') {
+                    console.log('✅ jsPDF chargé correctement au démarrage');
+                } else {
+                    console.warn('⚠️ jsPDF pas encore chargé au démarrage');
+                }
+            }, 2000);
+        });
+        
+    </script>
+</head>
+<body>
+    <!-- Page de connexion -->
+    <div id="loginPage" class="page active">
+        <div class="login-container">
+            <div class="login-header">
+                <i class="fas fa-graduation-cap"></i>
+                <h1>PERMAPPEL</h1>
+                <p>Application d'appel d'élèves</p>
+            </div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Nom d'utilisateur</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Mot de passe</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <button type="submit" class="btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Se connecter
+                </button>
+            </form>
+            
+            <div id="loginError" class="error"></div>
+        </div>
+    </div>
+
+    <!-- Page principale -->
+    <div id="mainPage" class="page">
+        <nav class="navbar">
+            <div class="navbar-brand">
+                <i class="fas fa-graduation-cap"></i>
+                PERMAPPEL
+            </div>
+            
+            <div class="navbar-menu">
+                <button class="nav-btn active" data-page="dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    Tableau de bord
+                </button>
+                <button class="nav-btn" data-page="students">
+                    <i class="fas fa-users"></i>
+                    Élèves
+                </button>
+                <button class="nav-btn" data-page="attendance">
+                    <i class="fas fa-clipboard-list"></i>
+                    Appels
+                </button>
+                <button class="nav-btn admin-only" data-page="admin">
+                    <i class="fas fa-cog"></i>
+                    Administration
+                </button>
+            </div>
+            
+            <div class="navbar-user">
+                <span id="userName">Utilisateur</span>
+                <button id="logoutBtn" class="btn btn-error">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Déconnexion
+                </button>
+            </div>
+        </nav>
+
+        <div class="main-content">
+            <!-- Tableau de bord -->
+            <div id="dashboardPage" class="page-content active">
+                <div class="page-header">
+                    <h2>Tableau de bord</h2>
+                </div>
+                
+                <!-- Créneau en cours -->
+                <div class="dashboard-section">
+                    <div class="dashboard-card current-schedule">
+                        <div class="card-header">
+                            <h3><i class="fas fa-clock"></i> Créneau en cours</h3>
+                        </div>
+                        <div class="card-body" id="currentScheduleCard">
+                            <div class="loading">Chargement...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistiques de la journée -->
+                <div class="dashboard-section">
+                    <div class="dashboard-card daily-stats">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-bar"></i> Statistiques de la journée</h3>
+                            <button class="btn btn-info" onclick="showAbsentStudentsModal()">
+                                <i class="fas fa-user-times"></i>
+                                Voir les absents
+                            </button>
+                        </div>
+                        <div class="card-body" id="dailyStatsCard">
+                            <div class="loading">Chargement...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section Élèves -->
+            <div id="studentsPage" class="page-content">
+                <div class="page-header">
+                    <h2>Gestion des élèves</h2>
+                    <div class="page-actions">
+                        <button class="btn btn-primary" id="addStudentBtn">
+                            <i class="fas fa-plus"></i>
+                            Ajouter un élève
+                        </button>
+                        <button class="btn btn-secondary" id="manageGroupsBtn">
+                            <i class="fas fa-layer-group"></i>
+                            Gérer les groupes
+                        </button>
+                        <button class="btn btn-warning" id="advancedSelectionBtn">
+                            <i class="fas fa-search-plus"></i>
+                            Sélection avancée
+                        </button>
+                        <button class="btn btn-info" id="downloadTemplateBtn">
+                            <i class="fas fa-download"></i>
+                            Modèle CSV
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section d'import -->
+                <div class="import-section">
+                    <div class="import-header">
+                        <i class="fas fa-file-import"></i>
+                        <h3>Import des élèves</h3>
+                    </div>
+                    
+                    <div class="import-content">
+                        <div class="import-card">
+                            <i class="fas fa-upload"></i>
+                            <h4>Importer un fichier CSV</h4>
+                            <p>Uploadez votre fichier CSV contenant les données des élèves</p>
+                            <input type="file" id="csvFileInput" class="file-input" accept=".csv">
+                            <label for="csvFileInput" class="file-label">
+                                <i class="fas fa-file-csv"></i>
+                                Sélectionner un fichier
+                            </label>
+                        </div>
+                        
+                        <div class="import-card">
+                            <i class="fas fa-info-circle"></i>
+                            <h4>Format attendu</h4>
+                            <p>Le fichier CSV doit contenir les colonnes : Nom, Prénom, Classe, Groupes, Régime, Date de naissance</p>
+                            <button class="btn btn-secondary" id="downloadTemplateBtn2">
+                                <i class="fas fa-download"></i>
+                                Télécharger le modèle
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Résultats de l'import -->
+                    <div id="importResults" class="import-results">
+                        <div class="results-summary">
+                            <div class="result-item success">
+                                <div class="result-number" id="createdCount">0</div>
+                                <div class="result-label">Créés</div>
+                            </div>
+                            <div class="result-item warning">
+                                <div class="result-number" id="updatedCount">0</div>
+                                <div class="result-label">Mis à jour</div>
+                            </div>
+                            <div class="result-item error">
+                                <div class="result-number" id="errorCount">0</div>
+                                <div class="result-label">Erreurs</div>
+                            </div>
+                        </div>
+                        
+                        <div id="errorList" class="error-list" style="display: none;">
+                            <h4>Détails des erreurs :</h4>
+                            <div id="errorItems"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtres et tri -->
+                <div class="students-controls">
+                    <div class="search-section">
+                        <div class="search-box">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="studentSearch" placeholder="Rechercher un élève...">
+                        </div>
+                    </div>
+                    <div class="filter-section">
+                        <div class="filter-group">
+                            <label for="studentClassFilter">Classe:</label>
+                            <select id="studentClassFilter">
+                                <option value="">Toutes les classes</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="studentGroupFilter">Groupe:</label>
+                            <select id="studentGroupFilter">
+                                <option value="">Tous les groupes</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="studentSort">Trier par:</label>
+                            <select id="studentSort">
+                                <option value="nom">Nom</option>
+                                <option value="prenom">Prénom</option>
+                                <option value="classe">Classe</option>
+                                <option value="groupe">Groupe</option>
+                                <option value="regime">Régime</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" id="applyFiltersBtn">
+                            <i class="fas fa-filter"></i>
+                            Appliquer
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Indicateur de résultats -->
+                <div id="studentsCount" class="students-count">
+                    <span id="studentsCountText">Chargement...</span>
+                </div>
+
+                <!-- Liste des élèves -->
+                <div id="studentsList" class="students-list">
+                    <p>Aucun élève importé pour le moment.</p>
+                </div>
+            </div>
+
+            <!-- Section Appels -->
+            <div id="attendancePage" class="page-content">
+                <div class="page-header">
+                    <h2>Gestion des appels</h2>
+                    <div class="page-actions">
+                        <button class="btn btn-secondary" onclick="loadAttendances()" title="Rafraîchir la liste des appels">
+                            <i class="fas fa-sync-alt"></i>
+                            Rafraîchir
+                        </button>
+                        <button class="btn btn-primary" id="newCallBtn">
+                            <i class="fas fa-plus"></i>
+                            Nouvel appel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="attendance-filters">
+                    <div class="filter-group">
+                        <label for="attendanceDate">Date</label>
+                        <input type="date" id="attendanceDate" value="">
+                    </div>
+                    <div class="filter-group">
+                        <label for="attendanceSchedule">Créneau</label>
+                        <select id="attendanceSchedule">
+                            <option value="">Tous les créneaux</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary" id="filterAttendances">
+                        <i class="fas fa-search"></i>
+                        Filtrer
+                    </button>
+                    <button class="btn btn-primary" onclick="exportDayAttendance()">
+                        <i class="fas fa-download"></i>
+                        Export journée
+                    </button>
+                    <button class="btn btn-success" onclick="showCustomExportModal()">
+                        <i class="fas fa-calendar-alt"></i>
+                        Export période
+                    </button>
+                </div>
+
+                <div id="attendanceList" class="attendance-list">
+                    <!-- Liste des appels chargée dynamiquement -->
+                </div>
+            </div>
+
+            <!-- Section Administration -->
+            <div id="adminPage" class="page-content">
+                <div class="page-header">
+                    <h2><i class="fas fa-cog"></i> Administration</h2>
+                </div>
+
+                <!-- Section Gestion des utilisateurs -->
+                <div class="admin-section">
+                    <div class="admin-section-header">
+                        <h3><i class="fas fa-users"></i> Gestion des utilisateurs</h3>
+                        <p>Créez et gérez les comptes utilisateurs de l'application</p>
+                    </div>
+                    
+                    <div class="users-mgmt">
+                        <div class="users-controls">
+                            <button class="btn btn-primary" onclick="showCreateUserModal()">
+                                <i class="fas fa-plus"></i>
+                                Nouvel utilisateur
+                            </button>
+                        </div>
+                        
+                        <div class="users-list" id="usersList">
+                            <!-- Les utilisateurs seront chargés ici -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Gestion de l'établissement -->
+                <div class="admin-section">
+                    <div class="admin-section-header">
+                        <h3><i class="fas fa-building"></i> Gestion de l'établissement</h3>
+                        <p>Configurez les informations de votre établissement</p>
+                    </div>
+                    
+                    <div class="establishment-mgmt">
+                        <div class="establishment-info" id="establishmentInfo">
+                            <!-- Les informations de l'établissement seront chargées ici -->
+                        </div>
+                        
+                        <div class="establishment-controls">
+                            <button class="btn btn-primary" onclick="showEditSchoolModal()">
+                                <i class="fas fa-edit"></i>
+                                Modifier l'établissement
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Créneaux -->
+                <div class="admin-section">
+                    <div class="admin-section-header">
+                        <h3><i class="fas fa-clock"></i> Gestion des créneaux</h3>
+                        <p>Créez et gérez les créneaux horaires pour les appels d'élèves</p>
+                    </div>
+                    
+                    <div class="schedules-mgmt">
+                        <div class="schedules-controls">
+                            <button class="btn btn-primary" onclick="showCreateScheduleModal()">
+                                <i class="fas fa-plus"></i>
+                                Nouveau créneau
+                            </button>
+                        </div>
+                        
+                        <div class="schedules-list" id="schedulesList">
+                            <!-- Les créneaux seront chargés ici -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section Base de données -->
+                <div class="admin-section">
+                    <div class="admin-section-header">
+                        <h3><i class="fas fa-database"></i> Gestion de la base de données</h3>
+                        <p>Sauvegardez ou réinitialisez la base de données</p>
+                    </div>
+                    
+                    <div class="database-mgmt">
+                        <div class="database-actions">
+                            <button class="btn btn-success" onclick="backupDatabase()">
+                                <i class="fas fa-download"></i>
+                                Sauvegarder
+                            </button>
+                            <button class="btn btn-warning" onclick="confirmDeleteStudents()">
+                                <i class="fas fa-user-times"></i>
+                                Supprimer les élèves
+                            </button>
+                            <button class="btn btn-error" onclick="confirmDatabaseReset()">
+                                <i class="fas fa-trash"></i>
+                                Réinitialiser tout
+                            </button>
+                        </div>
+                        
+                        <div class="database-info">
+                            <p><strong>Attention :</strong> Les opérations de suppression sont irréversibles.</p>
+                            <ul>
+                                <li><strong>Sauvegarder :</strong> Télécharge une copie de la base de données</li>
+                                <li><strong>Supprimer les élèves :</strong> Supprime uniquement les données des élèves et leurs appels</li>
+                                <li><strong>Réinitialiser tout :</strong> Supprime toutes les données et recrée la base</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Ajout d'élève -->
+        <div id="addStudentModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Ajouter un élève</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="addStudentForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="studentFirstName">Prénom *</label>
+                                <input type="text" id="studentFirstName" name="firstName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="studentLastName">Nom *</label>
+                                <input type="text" id="studentLastName" name="lastName" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="studentClassInput">Classe *</label>
+                                <select id="studentClassInput" name="class" required>
+                                    <option value="">Sélectionner une classe...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="studentBirthDate">Date de naissance *</label>
+                                <input type="date" id="studentBirthDate" name="birthDate" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="studentRegime">Régime</label>
+                                <select id="studentRegime" name="regime">
+                                    <option value="Externe">Externe</option>
+                                    <option value="Demi-pensionnaire">Demi-pensionnaire</option>
+                                    <option value="Interne">Interne</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="studentExitPermissions">Autorisations de sortie</label>
+                                <select id="studentExitPermissions" name="exitPermissions">
+                                    <option value="ND">Non défini</option>
+                                    <option value="Externe_Non">Externe Non</option>
+                                    <option value="Externe_Libre">Externe Libre</option>
+                                    <option value="DP_Non">DP Non</option>
+                                    <option value="DP_Oui">DP Oui</option>
+                                    <option value="DP_Libre">DP Libre</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Groupes</label>
+                            <div class="multiselect-container">
+                                <div class="multiselect-dropdown" id="addStudentGroupsDropdown">
+                                    <div class="multiselect-selected" id="addStudentGroupsSelected">
+                                        <span class="placeholder">Sélectionner des groupes...</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                    <div class="multiselect-options" id="addStudentGroupsOptions">
+                                        <!-- Options chargées dynamiquement -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="hideModal('addStudentModal')">Annuler</button>
+                            <button type="submit" class="btn btn-primary">Ajouter</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Nouvel appel -->
+        <div id="newCallModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Nouvel appel</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="newCallForm">
+                        <div class="form-group">
+                            <label for="callDate">Date</label>
+                            <input type="date" id="callDate" name="callDate" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="callSchedule">Créneau horaire</label>
+                            <select id="callSchedule" name="callSchedule" required>
+                                <option value="">Sélectionner un créneau</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Groupes</label>
+                            <div class="multiselect-container">
+                                <div class="multiselect-dropdown" id="newCallGroupsDropdown">
+                                    <div class="multiselect-selected" id="newCallGroupsSelected">
+                                        <span class="placeholder">Sélectionner des groupes...</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                    <div class="multiselect-options" id="newCallGroupsOptions">
+                                        <!-- Options chargées dynamiquement -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Classes</label>
+                            <div class="multiselect-container">
+                                <div class="multiselect-dropdown" id="newCallClassesDropdown">
+                                    <div class="multiselect-selected" id="newCallClassesSelected">
+                                        <span class="placeholder">Sélectionner des classes...</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                    <div class="multiselect-options" id="newCallClassesOptions">
+                                        <!-- Options chargées dynamiquement -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="recurringCall" name="recurringCall">
+                                Créer un appel récurrent
+                            </label>
+                        </div>
+                        <div id="recurrenceOptions" class="recurrence-options" style="display: none;">
+                            <div class="form-group">
+                                <label for="recurrenceType">Type de récurrence</label>
+                                <select id="recurrenceType" name="recurrenceType">
+                                    <option value="weekly">Hebdomadaire</option>
+                                    <option value="biweekly">Bihebdomadaire</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="recurrenceEndDate">Date de fin (optionnel)</label>
+                                <input type="date" id="recurrenceEndDate" name="recurrenceEndDate">
+                            </div>
+                            <div class="form-group">
+                                <label for="recurrenceCount">Nombre d'occurrences (optionnel)</label>
+                                <input type="number" id="recurrenceCount" name="recurrenceCount" min="1" max="52">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('newCallModal')">Annuler</button>
+                    <button type="submit" form="newCallForm" class="btn btn-primary">Créer l'appel</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Modification d'élève -->
+        <div id="editStudentModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Modifier l'élève</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="editStudentForm">
+                        <input type="hidden" id="editStudentId" name="studentId">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editStudentFirstName">Prénom *</label>
+                                <input type="text" id="editStudentFirstName" name="firstName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="editStudentLastName">Nom *</label>
+                                <input type="text" id="editStudentLastName" name="lastName" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editStudentClass">Classe *</label>
+                                <select id="editStudentClass" name="class" required>
+                                    <option value="">Sélectionner une classe...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="editStudentBirthDate">Date de naissance *</label>
+                                <input type="date" id="editStudentBirthDate" name="birthDate" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="editStudentRegime">Régime</label>
+                                <select id="editStudentRegime" name="regime">
+                                    <option value="Externe">Externe</option>
+                                    <option value="Demi-pensionnaire">Demi-pensionnaire</option>
+                                    <option value="Interne">Interne</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="editStudentExitPermissions">Autorisations de sortie</label>
+                                <select id="editStudentExitPermissions" name="exitPermissions">
+                                    <option value="ND">Non défini</option>
+                                    <option value="Externe_Non">Externe Non</option>
+                                    <option value="Externe_Libre">Externe Libre</option>
+                                    <option value="DP_Non">DP Non</option>
+                                    <option value="DP_Oui">DP Oui</option>
+                                    <option value="DP_Libre">DP Libre</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Groupes</label>
+                            <div class="multiselect-container">
+                                <div class="multiselect-dropdown" id="editStudentGroupsDropdown">
+                                    <div class="multiselect-selected" id="editStudentGroupsSelected">
+                                        <span class="placeholder">Sélectionner des groupes...</span>
+                                        <i class="fas fa-chevron-down"></i>
+                                    </div>
+                                    <div class="multiselect-options" id="editStudentGroupsOptions">
+                                        <!-- Options chargées dynamiquement -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="hideModal('editStudentModal')">Annuler</button>
+                            <button type="submit" class="btn btn-primary">Enregistrer</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Création/Modification de créneau -->
+        <div id="scheduleModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="scheduleModalTitle">Nouveau créneau</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="scheduleForm">
+                        <input type="hidden" id="scheduleId" name="scheduleId">
+                        <div class="form-group">
+                            <label for="scheduleName">Nom du créneau *</label>
+                            <input type="text" id="scheduleName" name="name" placeholder="Ex: M1, S1, Matin, ..." required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="scheduleStartTime">Heure de début *</label>
+                                <input type="time" id="scheduleStartTime" name="startTime" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="scheduleEndTime">Heure de fin *</label>
+                                <input type="time" id="scheduleEndTime" name="endTime" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="scheduleDescription">Description (optionnel)</label>
+                            <textarea id="scheduleDescription" name="description" placeholder="Description du créneau..."></textarea>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="hideModal('scheduleModal')">Annuler</button>
+                            <button type="submit" class="btn btn-primary" id="saveScheduleBtn">Enregistrer</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Création/Modification d'utilisateur -->
+        <div id="userModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="userModalTitle">Nouvel utilisateur</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="userForm">
+                        <input type="hidden" id="userId" name="userId">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="userFirstName">Prénom *</label>
+                                <input type="text" id="userFirstName" name="firstName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="userLastName">Nom *</label>
+                                <input type="text" id="userLastName" name="lastName" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="userUsername">Nom d'utilisateur *</label>
+                                <input type="text" id="userUsername" name="username" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="userEmail">Email *</label>
+                                <input type="email" id="userEmail" name="email" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="userRole">Rôle *</label>
+                                <select id="userRole" name="role" required>
+                                    <option value="">Sélectionner un rôle...</option>
+                                    <option value="admin">Administrateur</option>
+                                    <option value="aed">AED</option>
+                                    <option value="cpe">CPE</option>
+                                    <option value="documentaliste">Documentaliste</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="userPassword">Mot de passe <span id="passwordRequired">*</span></label>
+                                <input type="password" id="userPassword" name="password" minlength="6">
+                                <small id="passwordHelp" class="form-help">Minimum 6 caractères</small>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" onclick="hideModal('userModal')">Annuler</button>
+                            <button type="submit" class="btn btn-primary" id="saveUserBtn">Enregistrer</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Confirmation de suppression -->
+        <div id="confirmModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="confirmModalTitle">Confirmation</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p id="confirmModalMessage">Êtes-vous sûr de vouloir effectuer cette action ?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('confirmModal')">Annuler</button>
+                    <button type="button" class="btn btn-error" id="confirmModalBtn">Confirmer</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Modification de l'établissement -->
+        <div id="establishmentModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Modifier l'établissement</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="establishmentForm">
+                        <div class="form-group">
+                            <label for="establishmentName">Nom de l'établissement *</label>
+                            <input type="text" id="establishmentName" name="name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="establishmentAddress">Adresse *</label>
+                            <textarea id="establishmentAddress" name="address" rows="3" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="establishmentPhone">Téléphone *</label>
+                            <input type="tel" id="establishmentPhone" name="phone" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('establishmentModal')">Annuler</button>
+                    <button type="submit" form="establishmentForm" class="btn btn-primary">Enregistrer</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Export personnalisé -->
+        <div id="customExportModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Export PDF personnalisé</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <form id="customExportForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="customExportStartDate">Date de début *</label>
+                                <input type="date" id="customExportStartDate" name="startDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="customExportEndDate">Date de fin *</label>
+                                <input type="date" id="customExportEndDate" name="endDate" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="customExportSchedule">Créneau (optionnel)</label>
+                            <select id="customExportSchedule" name="scheduleId">
+                                <option value="">Tous les créneaux</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <p class="form-help">
+                                <i class="fas fa-info-circle"></i>
+                                Sélectionnez une période pour exporter toutes les feuilles d'appel correspondantes.
+                            </p>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('customExportModal')">Annuler</button>
+                    <button type="button" class="btn btn-success" onclick="exportCustomPeriod()">
+                        <i class="fas fa-file-pdf"></i>
+                        Générer le PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Élèves absents -->
+        <div id="absentStudentsModal" class="modal">
+            <div class="modal-content large">
+                <div class="modal-header">
+                    <h3><i class="fas fa-user-times"></i> Élèves absents de la journée</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <!-- Filtres -->
+                    <div class="filters-section">
+                        <div class="filter-group">
+                            <label for="absentScheduleFilter">Créneau</label>
+                            <select id="absentScheduleFilter">
+                                <option value="">Tous les créneaux</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="absentClassFilter">Classe</label>
+                            <select id="absentClassFilter">
+                                <option value="">Toutes les classes</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-primary" onclick="filterAbsentStudents()">
+                            <i class="fas fa-filter"></i>
+                            Filtrer
+                        </button>
+                    </div>
+                    
+                    <!-- Liste des absents -->
+                    <div class="absent-students-list" id="absentStudentsList">
+                        <div class="loading">Chargement...</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('absentStudentsModal')">Fermer</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Gestion des groupes -->
+        <div id="manageGroupsModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3><i class="fas fa-layer-group"></i> Gestion des groupes</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <!-- Formulaire d'ajout -->
+                    <div class="add-group-section">
+                        <h4>Ajouter un nouveau groupe</h4>
+                        <form id="addGroupForm">
+                            <div class="form-group">
+                                <label for="groupName">Nom du groupe *</label>
+                                <input type="text" id="groupName" name="groupName" required 
+                                       placeholder="Ex: Groupe A, Option Maths, etc.">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus"></i>
+                                Ajouter le groupe
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Liste des groupes existants -->
+                    <div class="groups-list-section">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                            <h4>Groupes existants</h4>
+                            <button class="btn btn-sm btn-secondary" onclick="refreshGroupsList()" title="Rafraîchir la liste">
+                                <i class="fas fa-sync-alt"></i>
+                                Rafraîchir
+                            </button>
+                        </div>
+                        <div id="groupsList" class="groups-list">
+                            <div class="loading">Chargement...</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="hideModal('manageGroupsModal')">Fermer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale de sélection avancée -->
+    <div id="advancedSelectionModal" class="modal">
+        <div class="modal-content large">
+            <div class="modal-header">
+                <h3><i class="fas fa-search-plus"></i> Sélection avancée des élèves</h3>
+                <button type="button" class="close-btn" onclick="hideModal('advancedSelectionModal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <!-- Section de recherche -->
+                <div class="search-criteria-section">
+                    <h4><i class="fas fa-filter"></i> Critères de recherche</h4>
+                    <div id="searchCriteriaContainer">
+                        <!-- Les critères seront ajoutés dynamiquement -->
+                    </div>
+                    <div class="search-actions">
+                        <button type="button" class="btn btn-secondary" id="addCriterionBtn">
+                            <i class="fas fa-plus"></i> Ajouter un critère
+                        </button>
+                        <button type="button" class="btn btn-primary" id="searchStudentsBtn">
+                            <i class="fas fa-search"></i> Lancer la recherche
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section des résultats -->
+                <div class="search-results-section" id="searchResultsSection" style="display: none;">
+                    <div class="results-header">
+                        <h4><i class="fas fa-list"></i> Résultats de la recherche</h4>
+                        <div class="results-actions">
+                            <button type="button" class="btn btn-sm btn-secondary" id="selectAllBtn">
+                                <i class="fas fa-check-square"></i> Tout sélectionner
+                            </button>
+                            <button type="button" class="btn btn-sm btn-secondary" id="deselectAllBtn">
+                                <i class="fas fa-square"></i> Tout désélectionner
+                            </button>
+                            <span id="selectedCount" class="selected-count">0 sélectionné(s)</span>
+                        </div>
+                    </div>
+                    <div class="results-table-container">
+                        <table id="searchResultsTable" class="results-table">
+                            <thead>
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" id="selectAllCheckbox">
+                                    </th>
+                                    <th>Nom</th>
+                                    <th>Prénom</th>
+                                    <th>Classe</th>
+                                    <th>Groupes</th>
+                                    <th>Régime</th>
+                                    <th>Autorisation sortie</th>
+                                </tr>
+                            </thead>
+                            <tbody id="searchResultsBody">
+                                <!-- Les résultats seront ajoutés dynamiquement -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Section des actions -->
+                <div class="bulk-actions-section" id="bulkActionsSection" style="display: none;">
+                    <h4><i class="fas fa-tasks"></i> Actions sur la sélection</h4>
+                    <div class="bulk-actions">
+                        <div class="action-group">
+                            <label>Assigner des groupes :</label>
+                            <div class="groups-selector">
+                                <div class="groups-tags-container" id="bulkGroupsTags">
+                                    <!-- Les tags de groupes seront ajoutés dynamiquement -->
+                                </div>
+                                <div class="groups-dropdown-container">
+                                    <select id="bulkGroupsDropdown" class="groups-dropdown">
+                                        <option value="">Sélectionner un groupe...</option>
+                                        <!-- Les groupes seront ajoutés dynamiquement -->
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-secondary" id="addGroupBtn">
+                                        <i class="fas fa-plus"></i> Ajouter
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="assignGroupsBtn">
+                                <i class="fas fa-layer-group"></i> Assigner
+                            </button>
+                        </div>
+                        <div class="action-group">
+                            <label>Modifier l'autorisation de sortie :</label>
+                            <select id="bulkExitPermissionSelect">
+                                <option value="">Sélectionner...</option>
+                                <option value="Non défini">Non défini</option>
+                                <option value="Externe Non">Externe Non</option>
+                                <option value="Externe Libre">Externe Libre</option>
+                                <option value="DP Non">DP Non</option>
+                                <option value="DP Oui">DP Oui</option>
+                                <option value="DP Libre">DP Libre</option>
+                            </select>
+                            <button type="button" class="btn btn-primary" id="assignExitPermissionBtn">
+                                <i class="fas fa-key"></i> Assigner
+                            </button>
+                        </div>
+                        <div class="action-group">
+                            <button type="button" class="btn btn-info" id="exportSelectedBtn">
+                                <i class="fas fa-file-export"></i> Exporter la sélection
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="hideModal('advancedSelectionModal')">Fermer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts JavaScript -->
+    <!-- Ordre d'importation important : utilitaires d'abord, puis fonctionnalités, puis app principal -->
+    <script src="js/utils.js"></script>
+    <script src="js/notifications.js"></script>
+    <script src="js/modals.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/groups.js"></script>
+    <script src="js/students.js"></script>
+    <script src="js/schedules.js"></script>
+    <script src="js/advanced-selection.js"></script>
+    <script src="js/attendance.js"></script>
+    <script src="js/pdf-export.js"></script>
+    <script src="js/users.js"></script>
+    <script src="js/database.js"></script>
+    <script src="js/school.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
