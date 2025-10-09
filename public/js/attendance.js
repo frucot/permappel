@@ -74,6 +74,27 @@ function getSelectedClasses() {
     return Array.from(checkboxes).map(cb => cb.value);
 }
 
+// Initialiser les event listeners du dropdown des groupes (une seule fois)
+function initGroupsDropdown() {
+    const dropdown = document.getElementById('newCallGroupsDropdown');
+    const selectedElement = document.getElementById('newCallGroupsSelected');
+    
+    if (!dropdown || !selectedElement) return;
+    
+    // Gestionnaire pour ouvrir/fermer le dropdown
+    selectedElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+    
+    // Gestionnaire pour fermer le dropdown en cliquant à l'extérieur
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+}
+
 // Fonction pour charger les groupes
 async function loadGroups() {
     try {
@@ -119,17 +140,6 @@ function populateGroupCheckboxesForNewCall(groups) {
     });
     
     updateSelectedGroupsDisplayForNewCall();
-    
-    selectedElement.addEventListener('click', (e) => {
-        e.stopPropagation();
-        dropdown.classList.toggle('open');
-    });
-    
-    document.addEventListener('click', (e) => {
-        if (!dropdown.contains(e.target)) {
-            dropdown.classList.remove('open');
-        }
-    });
 }
 
 // Mettre à jour l'affichage des groupes sélectionnés pour le nouvel appel
@@ -170,6 +180,27 @@ function updateSelectedGroupsDisplayForNewCall() {
             });
         });
     }
+}
+
+// Initialiser les event listeners du dropdown des classes (une seule fois)
+function initClassesDropdown() {
+    const dropdown = document.getElementById('newCallClassesDropdown');
+    const selectedElement = document.getElementById('newCallClassesSelected');
+    
+    if (!dropdown || !selectedElement) return;
+    
+    // Gestionnaire pour ouvrir/fermer le dropdown
+    selectedElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+    
+    // Gestionnaire pour fermer le dropdown en cliquant à l'extérieur
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
 }
 
 // Fonction pour charger les classes
@@ -217,17 +248,6 @@ function populateClassCheckboxesForNewCall(classes) {
     });
     
     updateSelectedClassesDisplayForNewCall();
-    
-    selectedElement.addEventListener('click', (e) => {
-        e.stopPropagation();
-        dropdown.classList.toggle('open');
-    });
-    
-    document.addEventListener('click', (e) => {
-        if (!dropdown.contains(e.target)) {
-            dropdown.classList.remove('open');
-        }
-    });
 }
 
 // Mettre à jour l'affichage des classes sélectionnées pour le nouvel appel
@@ -495,6 +515,10 @@ function openAttendanceEdit(attendanceId) {
 
 // Initialiser les gestionnaires pour les appels
 function initAttendanceHandlers() {
+    // Initialiser les dropdowns une seule fois
+    initGroupsDropdown();
+    initClassesDropdown();
+    
     // Gestion du formulaire de nouvel appel
     const newCallForm = document.getElementById('newCallForm');
     if (newCallForm) {

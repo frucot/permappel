@@ -338,6 +338,27 @@ async function loadGroupsForAdd() {
     }
 }
 
+// Initialiser les event listeners du dropdown des groupes pour l'ajout (une seule fois)
+function initAddStudentGroupsDropdown() {
+    const dropdown = document.getElementById('addStudentGroupsDropdown');
+    const selectedElement = document.getElementById('addStudentGroupsSelected');
+    
+    if (!dropdown || !selectedElement) return;
+    
+    // Gestionnaire pour ouvrir/fermer le dropdown
+    selectedElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+    
+    // Gestionnaire pour fermer le dropdown en cliquant à l'extérieur
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+}
+
 // Remplir le composant multiselect des groupes pour l'ajout
 function populateGroupCheckboxesForAdd(groups) {
     const dropdown = document.getElementById('addStudentGroupsDropdown');
@@ -366,17 +387,6 @@ function populateGroupCheckboxesForAdd(groups) {
     });
     
     updateSelectedGroupsDisplayForAdd();
-    
-    selectedElement.addEventListener('click', (e) => {
-        e.stopPropagation();
-        dropdown.classList.toggle('open');
-    });
-    
-    document.addEventListener('click', (e) => {
-        if (!dropdown.contains(e.target)) {
-            dropdown.classList.remove('open');
-        }
-    });
 }
 
 // Mettre à jour l'affichage des groupes sélectionnés pour l'ajout
@@ -480,6 +490,27 @@ function displayGroupTagsForEdit(selectedGroups = []) {
     }
 }
 
+// Initialiser les event listeners du dropdown des groupes pour la modification (une seule fois)
+function initEditStudentGroupsDropdown() {
+    const dropdown = document.getElementById('editStudentGroupsDropdown');
+    const selectedElement = document.getElementById('editStudentGroupsSelected');
+    
+    if (!dropdown || !selectedElement) return;
+    
+    // Gestionnaire pour ouvrir/fermer le dropdown
+    selectedElement.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('open');
+    });
+    
+    // Gestionnaire pour fermer le dropdown en cliquant à l'extérieur
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+}
+
 // Remplir le composant multiselect des groupes pour la modification
 function populateGroupCheckboxesForEdit(groups, selectedGroups = []) {
     const dropdown = document.getElementById('editStudentGroupsDropdown');
@@ -510,17 +541,6 @@ function populateGroupCheckboxesForEdit(groups, selectedGroups = []) {
     });
     
     updateSelectedGroupsDisplayForEdit();
-    
-    selectedElement.addEventListener('click', (e) => {
-        e.stopPropagation();
-        dropdown.classList.toggle('open');
-    });
-    
-    document.addEventListener('click', (e) => {
-        if (!dropdown.contains(e.target)) {
-            dropdown.classList.remove('open');
-        }
-    });
 }
 
 // Mettre à jour l'affichage des groupes sélectionnés pour la modification
@@ -565,6 +585,10 @@ function updateSelectedGroupsDisplayForEdit() {
 
 // Initialiser les gestionnaires de formulaires d'élèves
 function initStudentFormHandlers() {
+    // Initialiser les dropdowns une seule fois
+    initAddStudentGroupsDropdown();
+    initEditStudentGroupsDropdown();
+    
     // Gestion du formulaire d'ajout d'élève
     const addStudentForm = document.getElementById('addStudentForm');
     if (addStudentForm) {
