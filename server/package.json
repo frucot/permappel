@@ -1,6 +1,6 @@
 {
   "name": "permappel-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Serveur PERMAPPEL",
   "main": "server.js",
   "scripts": {

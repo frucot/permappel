@@ -807,6 +807,114 @@ module.exports = (db, io) => {
         }
     });
 
+    // POST /api/attendance/:id/sync-students - Synchroniser automatiquement les élèves d'une feuille d'appel
+    router.post('/:id/sync-students', async (req, res) => {
+        try {
+            const { id } = req.params;
+            const [date, creneauId] = id.split('_');
+            
+            // Récupérer la feuille d'appel
+            const feuille = await db.executeQuery(
+                'SELECT id, classes, groupes FROM feuilles_appel WHERE date = ? AND creneauId = ?',
+                [date, creneauId]
+            );
+            
+            if (feuille.length === 0) {
+                return res.status(404).json({ success: false, message: 'Feuille d\'appel non trouvée' });
+            }
+            
+            // Récupérer les paramètres de la feuille
+            const classes = JSON.parse(feuille[0].classes || '[]');
+            const groups = JSON.parse(feuille[0].groupes || '[]');
+            
+            // Récupérer les élèves déjà présents dans la feuille
+            const existingPresences = await db.executeQuery(
+                'SELECT eleveId FROM presences WHERE feuilleAppelId = ?',
+                [feuille[0].id]
+            );
+            const existingStudentIds = new Set(existingPresences.map(p => p.eleveId));
+            
+            // Récupérer TOUS les élèves correspondant aux critères (y compris les nouveaux)
+            let elevesQuery = 'SELECT * FROM eleves WHERE actif = 1';
+            const elevesParams = [];
+            
+            if (classes.length > 0) {
+                elevesQuery += ' AND classe IN (' + classes.map(() => '?').join(',') + ')';
+                elevesParams.push(...classes);
+            }
+            
+            if (groups.length > 0) {
+                elevesQuery += ` AND id IN (
+                    SELECT DISTINCT eleveId FROM eleves_groupes eg
+                    JOIN groupes g ON eg.groupeId = g.id
+                    WHERE g.nom IN (${groups.map(() => '?').join(',')})
+                )`;
+                elevesParams.push(...groups);
+            }
+            
+            const allEligibleStudents = await db.executeQuery(elevesQuery, elevesParams);
+            const eligibleStudentIds = new Set(allEligibleStudents.map(e => e.id));
+            
+            // Filtrer pour ne garder que les nouveaux élèves (ceux qui ne sont pas déjà dans la feuille)
+            const newStudents = allEligibleStudents.filter(eleve => !existingStudentIds.has(eleve.id));
+            
+            // Trouver les élèves à supprimer (ceux qui sont dans la feuille mais ne correspondent plus aux critères)
+            const studentsToRemove = Array.from(existingStudentIds).filter(studentId => !eligibleStudentIds.has(studentId));
+            
+            console.log(`🔄 Synchronisation: ${existingStudentIds.size} élèves existants, ${allEligibleStudents.length} élèves éligibles, ${newStudents.length} nouveaux à ajouter, ${studentsToRemove.length} à supprimer`);
+            
+            // Ajouter les nouveaux élèves avec statut NON_APPELE
+            let addedCount = 0;
+            for (const eleve of newStudents) {
+                try {
+                    await db.executeQuery(`
+                        INSERT INTO presences (feuilleAppelId, eleveId, statut, modifiePar)
+                        VALUES (?, ?, 'NON_APPELE', ?)
+                    `, [feuille[0].id, eleve.id, 1]);
+                    addedCount++;
+                    console.log(`✅ Élève ${eleve.id} (${eleve.nom} ${eleve.prenom}) ajouté à la feuille d'appel`);
+                } catch (err) {
+                    // Ignorer les erreurs de doublons (cas de race condition)
+                    console.log(`⚠️ Élève ${eleve.id} déjà présent ou erreur:`, err.message);
+                }
+            }
+            
+            // Supprimer les élèves qui ne correspondent plus aux critères
+            let removedCount = 0;
+            for (const studentId of studentsToRemove) {
+                try {
+                    // Récupérer les infos de l'élève pour le log
+                    const eleveInfo = await db.executeQuery('SELECT nom, prenom FROM eleves WHERE id = ?', [studentId]);
+                    const eleveName = eleveInfo.length > 0 ? `${eleveInfo[0].nom} ${eleveInfo[0].prenom}` : `ID ${studentId}`;
+                    
+                    await db.executeQuery(
+                        'DELETE FROM presences WHERE feuilleAppelId = ? AND eleveId = ?',
+                        [feuille[0].id, studentId]
+                    );
+                    removedCount++;
+                    console.log(`🗑️ Élève ${studentId} (${eleveName}) supprimé de la feuille d'appel (ne correspond plus aux critères)`);
+                } catch (err) {
+                    console.error(`❌ Erreur lors de la suppression de l'élève ${studentId}:`, err.message);
+                }
+            }
+            
+            const finalTotal = existingStudentIds.size + addedCount - removedCount;
+            
+            res.json({ 
+                success: true, 
+                message: addedCount > 0 || removedCount > 0 
+                    ? `${addedCount} élève(s) ajouté(s), ${removedCount} élève(s) supprimé(s)` 
+                    : 'Aucune modification nécessaire',
+                addedCount: addedCount,
+                removedCount: removedCount,
+                totalStudents: finalTotal
+            });
+        } catch (error) {
+            console.error('Erreur lors de la synchronisation des élèves:', error);
+            res.status(500).json({ success: false, message: 'Erreur serveur lors de la synchronisation' });
+        }
+    });
+
     // POST /api/attendance/:attendanceId/refresh - Forcer l'ajout des élèves à une feuille d'appel
     router.post('/:attendanceId/refresh', async (req, res) => {
         try {

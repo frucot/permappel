@@ -1,6 +1,6 @@
 {
   "name": "permappel",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Application d'appel d'élèves PERMAPPEL",
   "main": "main.js",
   "homepage": "./",
@@ -52,7 +52,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "PERMAPPEL Setup ${version}.${ext}"
     },
     "forceCodeSigning": false
   },

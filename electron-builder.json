@@ -53,7 +53,8 @@
     "uninstallerIcon": "assets/icon.ico",
     "installerHeaderIcon": "assets/icon.ico",
     "deleteAppDataOnUninstall": false,
-    "runAfterFinish": true
+    "runAfterFinish": true,
+    "artifactName": "PERMAPPEL Setup ${version}.${ext}"
   },
   "publish": null
 }

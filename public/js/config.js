@@ -2,10 +2,21 @@
 const CONFIG = {
     // URL de base de l'API - détection automatique
     get API_BASE_URL() {
+        // Détecter si on est dans Electron
+        const isElectron = typeof window !== 'undefined' && 
+                          window.process && 
+                          window.process.type === 'renderer';
+        
+        // Si on est dans Electron ou si hostname est vide (protocole file://), utiliser localhost
+        if (isElectron || !window.location.hostname || window.location.hostname === '') {
+            return 'http://localhost:3001';
+        }
+        
         // Si on est sur localhost, utiliser localhost
         if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
             return 'http://localhost:3001';
         }
+        
         // Sinon, utiliser l'adresse du serveur actuel
         return `http://${window.location.hostname}:3001`;
     },

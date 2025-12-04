@@ -211,6 +211,30 @@ async function loadAttendance(attendanceId) {
         showLoading(true);
         
         const token = localStorage.getItem('token');
+        
+        // 1. Synchroniser automatiquement les élèves (ajouter les nouveaux et supprimer ceux qui ne correspondent plus)
+        try {
+            const syncResponse = await fetch(`${api}/attendance/${attendanceId}/sync-students`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (syncResponse.ok) {
+                const syncData = await syncResponse.json();
+                if (syncData.success) {
+                    if (syncData.addedCount > 0 || syncData.removedCount > 0) {
+                        console.log(`🔄 Synchronisation automatique: ${syncData.addedCount} élève(s) ajouté(s), ${syncData.removedCount} élève(s) supprimé(s)`);
+                    } else {
+                        console.log('🔄 Synchronisation automatique: Aucune modification nécessaire');
+                    }
+                }
+            }
+        } catch (syncError) {
+            // Ne pas bloquer le chargement si la synchronisation échoue
+            console.warn('⚠️ Erreur lors de la synchronisation des élèves (non bloquant):', syncError);
+        }
+        
+        // 2. Charger la feuille d'appel avec les élèves à jour
         const response = await fetch(`${api}/attendance/${attendanceId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -856,20 +880,30 @@ function showError(message) {
 }
 
 // Afficher une notification
-function showNotification(message) {
+function showNotification(message, type = 'success') {
     const notification = document.createElement('div');
     notification.className = 'notification';
+    
+    // Couleurs selon le type
+    const colors = {
+        success: 'var(--success-color)',
+        info: 'var(--primary-color)',
+        warning: 'var(--warning-color)',
+        error: 'var(--error-color)'
+    };
+    
     notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: var(--primary-color);
+        background: ${colors[type] || colors.success};
         color: white;
         padding: 1rem 1.5rem;
         border-radius: var(--border-radius);
         box-shadow: var(--shadow-lg);
         z-index: 1001;
         animation: slideIn 0.3s ease;
+        max-width: 400px;
     `;
     notification.textContent = message;
     
@@ -882,8 +916,11 @@ function showNotification(message) {
                 notification.parentNode.removeChild(notification);
             }
         }, 300);
-    }, 3000);
+    }, type === 'info' ? 5000 : 3000); // Plus long pour les notifications info
 }
+
+// Exposer la fonction globalement pour le bouton HTML
+window.syncStudentsManually = syncStudentsManually;
 
 // Activer le mode lecture seule
 function enableReadOnlyMode() {
@@ -903,16 +940,73 @@ function enableReadOnlyMode() {
         attendancePage.classList.add('readonly-mode');
     }
     
-    // Désactiver les boutons d'ajout en mode lecture seule
+    // Désactiver les boutons d'ajout et de synchronisation en mode lecture seule
     const addGroupsBtn = document.getElementById('addGroupsBtn');
     const addClassesBtn = document.getElementById('addClassesBtn');
+    const syncStudentsBtn = document.getElementById('syncStudentsBtn');
     const checkBtn = document.querySelector('button[onclick="showAttendanceCheckModal()"]');
     
     if (addGroupsBtn) addGroupsBtn.style.display = 'none';
     if (addClassesBtn) addClassesBtn.style.display = 'none';
+    if (syncStudentsBtn) syncStudentsBtn.style.display = 'none';
     if (checkBtn) checkBtn.style.display = 'none';
     
     console.log('📖 Mode lecture seule activé - Les modifications sont désactivées');
+}
+
+// Fonction pour synchroniser manuellement les élèves
+async function syncStudentsManually() {
+    if (!currentAttendance) {
+        showError('Aucune feuille d\'appel chargée');
+        return;
+    }
+    
+    if (isReadOnlyMode) {
+        showNotification('Mode lecture seule - La synchronisation n\'est pas autorisée', 'warning');
+        return;
+    }
+    
+    const syncBtn = document.getElementById('syncStudentsBtn');
+    if (syncBtn) {
+        syncBtn.disabled = true;
+        syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Synchronisation...';
+    }
+    
+    try {
+        const token = localStorage.getItem('token');
+        const syncResponse = await fetch(`${api}/attendance/${currentAttendance.id}/sync-students`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (syncResponse.ok) {
+            const syncData = await syncResponse.json();
+            if (syncData.success) {
+                if (syncData.addedCount > 0 || syncData.removedCount > 0) {
+                    console.log(`🔄 Synchronisation manuelle: ${syncData.addedCount} élève(s) ajouté(s), ${syncData.removedCount} élève(s) supprimé(s)`);
+                    // Recharger la feuille d'appel pour afficher les modifications
+                    await loadAttendance(currentAttendance.id);
+                    showNotification(`Synchronisation réussie: ${syncData.addedCount} ajouté(s), ${syncData.removedCount} supprimé(s)`, 'success');
+                } else {
+                    console.log('🔄 Synchronisation manuelle: Aucune modification nécessaire');
+                    showNotification('Aucune modification nécessaire - La liste est à jour', 'info');
+                }
+            } else {
+                throw new Error(syncData.message || 'Erreur lors de la synchronisation');
+            }
+        } else {
+            const errorData = await syncResponse.json();
+            throw new Error(errorData.message || 'Erreur lors de la synchronisation');
+        }
+    } catch (error) {
+        console.error('Erreur lors de la synchronisation manuelle:', error);
+        showError('Erreur lors de la synchronisation: ' + error.message);
+    } finally {
+        if (syncBtn) {
+            syncBtn.disabled = false;
+            syncBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Synchroniser les élèves';
+        }
+    }
 }
 
 // Fonction pour exporter en PDF (fonctionne en mode lecture seule)
