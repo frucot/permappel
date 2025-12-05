@@ -1,6 +1,6 @@
 {
   "name": "permappel",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Application d'appel d'élèves PERMAPPEL",
   "main": "main.js",
   "homepage": "./",

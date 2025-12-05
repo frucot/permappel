@@ -388,8 +388,85 @@ class DatabaseManager {
                 console.error('Erreur sauvegarde:', err);
             } else {
                 console.log(`✅ Sauvegarde créée: ${backupPath}`);
+                // Nettoyer les anciennes sauvegardes après chaque nouvelle sauvegarde
+                this.cleanOldBackups(backupDir);
             }
         });
+    }
+
+    // Nettoyer les anciennes sauvegardes
+    // Garde les sauvegardes des 30 derniers jours et un maximum de 100 sauvegardes
+    cleanOldBackups(backupDir) {
+        try {
+            if (!fs.existsSync(backupDir)) {
+                return;
+            }
+
+            const files = fs.readdirSync(backupDir);
+            const backupFiles = files
+                .filter(file => file.startsWith('permappel_backup_') && file.endsWith('.db'))
+                .map(file => {
+                    const filePath = path.join(backupDir, file);
+                    const stats = fs.statSync(filePath);
+                    // Extraire le timestamp du nom de fichier
+                    const match = file.match(/permappel_backup_(\d+)\.db/);
+                    const timestamp = match ? parseInt(match[1], 10) : stats.mtime.getTime();
+                    return {
+                        name: file,
+                        path: filePath,
+                        timestamp: timestamp,
+                        date: new Date(timestamp),
+                        size: stats.size
+                    };
+                })
+                .sort((a, b) => b.timestamp - a.timestamp); // Plus récentes en premier
+
+            const now = Date.now();
+            const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000); // 30 jours en millisecondes
+            const maxBackups = 100; // Maximum de sauvegardes à conserver
+
+            let deletedCount = 0;
+            let deletedSize = 0;
+
+            // Supprimer les sauvegardes de plus de 30 jours
+            for (const file of backupFiles) {
+                if (file.timestamp < thirtyDaysAgo) {
+                    try {
+                        deletedSize += file.size;
+                        fs.unlinkSync(file.path);
+                        deletedCount++;
+                        console.log(`🗑️  Sauvegarde supprimée (plus de 30 jours): ${file.name}`);
+                    } catch (error) {
+                        console.warn(`⚠️  Impossible de supprimer ${file.name}:`, error.message);
+                    }
+                }
+            }
+
+            // Si on a encore plus de maxBackups sauvegardes, supprimer les plus anciennes
+            const remainingBackups = backupFiles.filter(f => !fs.existsSync(f.path) || f.timestamp >= thirtyDaysAgo);
+            if (remainingBackups.length > maxBackups) {
+                const toDelete = remainingBackups.slice(maxBackups);
+                for (const file of toDelete) {
+                    if (fs.existsSync(file.path)) {
+                        try {
+                            deletedSize += file.size;
+                            fs.unlinkSync(file.path);
+                            deletedCount++;
+                            console.log(`🗑️  Sauvegarde supprimée (limite de ${maxBackups} atteinte): ${file.name}`);
+                        } catch (error) {
+                            console.warn(`⚠️  Impossible de supprimer ${file.name}:`, error.message);
+                        }
+                    }
+                }
+            }
+
+            if (deletedCount > 0) {
+                const deletedSizeMB = (deletedSize / (1024 * 1024)).toFixed(2);
+                console.log(`🧹 Nettoyage terminé: ${deletedCount} sauvegarde(s) supprimée(s), ${deletedSizeMB} MB libérés`);
+            }
+        } catch (error) {
+            console.warn('⚠️  Erreur lors du nettoyage des sauvegardes:', error.message);
+        }
     }
 
     close() {

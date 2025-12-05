@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-module.exports = (db) => {
+module.exports = (db, serverInstance) => {
     // Obtenir tous les utilisateurs
     router.get('/users', async (req, res) => {
         try {
@@ -463,6 +463,139 @@ module.exports = (db) => {
             res.status(500).json({ 
                 success: false, 
                 message: 'Erreur serveur' 
+            });
+        }
+    });
+
+    // ===== GESTION DE LA SÉCURITÉ =====
+    
+    // Obtenir la configuration de sécurité
+    router.get('/security', async (req, res) => {
+        try {
+            const config = await db.executeQuery(
+                'SELECT cle, valeur FROM config WHERE cle LIKE "security_%"'
+            );
+            
+            const securityConfig = {
+                enabled: false,
+                allowedIPs: [],
+                allowedRanges: []
+            };
+            
+            // Parser les valeurs de configuration
+            config.forEach(row => {
+                const key = row.cle.replace('security_', '');
+                if (key === 'enabled') {
+                    securityConfig.enabled = row.valeur === 'true' || row.valeur === '1';
+                } else if (key === 'allowedIPs') {
+                    try {
+                        securityConfig.allowedIPs = JSON.parse(row.valeur || '[]');
+                    } catch (e) {
+                        securityConfig.allowedIPs = [];
+                    }
+                } else if (key === 'allowedRanges') {
+                    try {
+                        securityConfig.allowedRanges = JSON.parse(row.valeur || '[]');
+                    } catch (e) {
+                        securityConfig.allowedRanges = [];
+                    }
+                }
+            });
+            
+            res.json({
+                success: true,
+                config: securityConfig
+            });
+        } catch (error) {
+            console.error('Erreur récupération configuration sécurité:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Erreur serveur'
+            });
+        }
+    });
+
+    // Sauvegarder la configuration de sécurité
+    router.put('/security', async (req, res) => {
+        try {
+            const { enabled, allowedIPs, allowedRanges } = req.body;
+            
+            if (typeof enabled !== 'boolean') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Le paramètre enabled doit être un booléen'
+                });
+            }
+            
+            if (!Array.isArray(allowedIPs)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'allowedIPs doit être un tableau'
+                });
+            }
+
+            // Valider chaque IP (IPv4 ou localhost IPv6)
+            const ipRegex = /^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.|$)){4}$|^::1$|^::ffff:((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.|$)){4}$/;
+            for (const ip of allowedIPs) {
+                if (typeof ip !== 'string' || !ipRegex.test(ip.trim())) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Adresse IP invalide: ${ip}`
+                    });
+                }
+            }
+            
+            if (!Array.isArray(allowedRanges)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'allowedRanges doit être un tableau'
+                });
+            }
+            
+            // Valider les plages d'IPs
+            for (const range of allowedRanges) {
+                if (!range.base || typeof range.start !== 'number' || typeof range.end !== 'number') {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Format de plage d\'IP invalide. Format attendu: { base: "10.131.100", start: 1, end: 254 }'
+                    });
+                }
+                if (range.start < 0 || range.end > 255 || range.start > range.end) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Les valeurs start et end doivent être entre 0 et 255, et start <= end'
+                    });
+                }
+            }
+            
+            // Sauvegarder dans la base de données
+            await db.executeQuery(
+                'INSERT OR REPLACE INTO config (cle, valeur, description, modifieLe) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
+                ['security_enabled', enabled.toString(), 'Activer la restriction par IP']
+            );
+            await db.executeQuery(
+                'INSERT OR REPLACE INTO config (cle, valeur, description, modifieLe) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
+                ['security_allowedIPs', JSON.stringify(allowedIPs), 'Liste des IPs autorisées (JSON array)']
+            );
+            await db.executeQuery(
+                'INSERT OR REPLACE INTO config (cle, valeur, description, modifieLe) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
+                ['security_allowedRanges', JSON.stringify(allowedRanges), 'Plages d\'IPs autorisées (JSON array)']
+            );
+            
+            // Recharger la configuration sur le serveur
+            if (serverInstance && typeof serverInstance.reloadSecurityConfig === 'function') {
+                await serverInstance.reloadSecurityConfig();
+            }
+            
+            res.json({
+                success: true,
+                message: 'Configuration de sécurité sauvegardée avec succès'
+            });
+        } catch (error) {
+            console.error('Erreur sauvegarde configuration sécurité:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Erreur serveur'
             });
         }
     });

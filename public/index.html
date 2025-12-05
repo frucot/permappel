@@ -396,6 +396,70 @@
                     </div>
                 </div>
 
+                <!-- Section Gestion de la sécurité -->
+                <div class="admin-section">
+                    <div class="admin-section-header">
+                        <h3><i class="fas fa-shield-alt"></i> Gestion de la sécurité</h3>
+                        <p>Configurez la restriction d'accès par adresse IP</p>
+                    </div>
+                    
+                    <div class="security-mgmt" id="securityMgmt">
+                        <div class="security-controls">
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="securityEnabled" onchange="toggleSecurityEnabled()">
+                                    <span>Activer la restriction par adresse IP</span>
+                                </label>
+                                <p class="form-help">Quand activée, seules les adresses IP autorisées pourront accéder à l'application</p>
+                            </div>
+                        </div>
+                        
+                        <div id="securityConfigPanel" style="display: none;">
+                            <!-- IPs individuelles -->
+                            <div class="security-section">
+                                <h4><i class="fas fa-list"></i> Adresses IP autorisées</h4>
+                                <div class="ip-list-container">
+                                    <div id="allowedIPsList" class="ip-list">
+                                        <!-- Les IPs seront ajoutées dynamiquement -->
+                                    </div>
+                                    <div class="ip-input-group">
+                                        <input type="text" id="newIPInput" placeholder="Ex: 192.168.1.100" pattern="^([0-9]{1,3}\.){3}[0-9]{1,3}$|^::1$|^::ffff:">
+                                        <button class="btn btn-primary btn-sm" onclick="addIP()">
+                                            <i class="fas fa-plus"></i> Ajouter
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Plages d'IPs -->
+                            <div class="security-section">
+                                <h4><i class="fas fa-network-wired"></i> Plages d'adresses IP autorisées</h4>
+                                <div class="ip-range-list-container">
+                                    <div id="allowedRangesList" class="ip-range-list">
+                                        <!-- Les plages seront ajoutées dynamiquement -->
+                                    </div>
+                                    <div class="ip-range-input-group">
+                                        <input type="text" id="newRangeBaseInput" placeholder="Base (ex: 10.131.100)" pattern="^([0-9]{1,3}\.){2}[0-9]{1,3}$">
+                                        <input type="number" id="newRangeStartInput" placeholder="Début" min="0" max="255" value="1">
+                                        <input type="number" id="newRangeEndInput" placeholder="Fin" min="0" max="255" value="254">
+                                        <button class="btn btn-primary btn-sm" onclick="addIPRange()">
+                                            <i class="fas fa-plus"></i> Ajouter
+                                        </button>
+                                    </div>
+                                    <p class="form-help">Format: Base (ex: 10.131.100) + Début (1-255) + Fin (1-255). Exemple: 10.131.100.1 à 10.131.100.254</p>
+                                </div>
+                            </div>
+                            
+                            <div class="security-actions">
+                                <button class="btn btn-success" onclick="saveSecurityConfig()">
+                                    <i class="fas fa-save"></i>
+                                    Enregistrer la configuration
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Section Base de données -->
                 <div class="admin-section">
                     <div class="admin-section-header">
@@ -1059,6 +1123,7 @@
     <script src="js/users.js"></script>
     <script src="js/database.js"></script>
     <script src="js/school.js"></script>
+    <script src="js/security.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/app.js"></script>
 </body>

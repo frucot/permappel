@@ -372,16 +372,154 @@ Les tables sont initialisées automatiquement avec les structures nécessaires.
 
 ### Sauvegarde automatique
 
-La base de données est sauvegardée automatiquement toutes les heures dans :
-- `server/backups/permappel_backup_[timestamp].db`
+La base de données est sauvegardée automatiquement toutes les heures pour protéger vos données contre les pertes accidentelles.
+
+#### Fonctionnement
+
+- **Fréquence** : Une sauvegarde est créée automatiquement toutes les heures
+- **Emplacement** : Les sauvegardes sont stockées dans le dossier `backups/` du répertoire de la base de données :
+  - **Windows** : `C:\ProgramData\PERMAPPEL\backups\`
+  - **macOS** : `/Library/Application Support/PERMAPPEL/backups/`
+  - **Linux** : `/opt/PERMAPPEL/backups/`
+- **Nommage** : Chaque sauvegarde est nommée `permappel_backup_[timestamp].db` (ex: `permappel_backup_1759481272614.db`)
+
+#### Nettoyage automatique
+
+Pour éviter que l'espace disque ne soit saturé, le système nettoie automatiquement les anciennes sauvegardes :
+
+- **Conservation** : Les sauvegardes sont conservées pendant **30 jours maximum**
+- **Limite** : Un maximum de **100 sauvegardes** est conservé (les plus récentes)
+- **Suppression** : Les sauvegardes de plus de 30 jours ou au-delà de la limite de 100 sont automatiquement supprimées après chaque nouvelle sauvegarde
+
+**Exemple** :
+- Avec une sauvegarde par heure, cela représente environ **24 sauvegardes par jour**
+- Le système conserve automatiquement les **100 dernières sauvegardes** (≈ 4 jours) + toutes celles de moins de 30 jours
+- Les sauvegardes de plus de 30 jours sont supprimées automatiquement
+
+#### Sauvegarde manuelle
+
+Vous pouvez également créer une sauvegarde manuelle depuis l'interface d'administration :
+
+**Menu : Administration → Base de données → Sauvegarder**
+
+La sauvegarde sera téléchargée directement sur votre ordinateur.
+
+#### Restauration
+
+Pour restaurer une sauvegarde :
+
+1. Arrêter l'application PERMAPPEL
+2. Remplacer le fichier `permappel.db` par le fichier de sauvegarde souhaité
+3. Renommer le fichier de sauvegarde en `permappel.db`
+4. Redémarrer l'application
+
+⚠️ **Attention** : La restauration remplace complètement la base de données actuelle. Assurez-vous d'avoir une sauvegarde récente avant de restaurer.
 
 ## 🔒 Sécurité
+
+### Mesures de sécurité générales
 
 - **Authentification JWT** pour toutes les requêtes
 - **Validation des données** côté serveur
 - **Protection CORS** configurée
 - **Chiffrement** des mots de passe avec bcrypt
 - **Sessions** avec timeout automatique
+
+### 🔐 Restriction d'accès par adresse IP
+
+PERMAPPEL inclut un système de restriction d'accès par adresse IP pour limiter l'accès à l'application aux postes autorisés uniquement.
+
+#### Fonctionnement
+
+La restriction par IP permet de :
+- **Autoriser uniquement certaines adresses IP** à accéder à l'application
+- **Définir des plages d'adresses IP** pour autoriser un réseau entier
+- **Protéger l'application** contre les accès non autorisés depuis le réseau local
+
+#### Configuration
+
+**Menu : Administration → Gestion de la sécurité**
+
+##### 1. Activer/Désactiver la restriction
+
+- Cochez la case **"Activer la restriction par adresse IP"** pour activer la fonctionnalité
+- Par défaut, la restriction est **désactivée** (tous les postes peuvent accéder)
+
+⚠️ **Attention** : Si vous activez la restriction sans avoir configuré d'IPs autorisées, vous risquez de vous bloquer vous-même !
+
+##### 2. Configurer les adresses IP individuelles
+
+Pour autoriser des postes spécifiques :
+
+1. Dans la section **"Adresses IP autorisées"**
+2. Saisir l'adresse IP (ex: `192.168.1.100`)
+3. Cliquer sur **"Ajouter"**
+4. Répéter pour chaque poste à autoriser
+
+**Formats acceptés :**
+- IPv4 : `192.168.1.100`
+- Localhost IPv6 : `::1` ou `::ffff:127.0.0.1`
+
+##### 3. Configurer les plages d'adresses IP
+
+Pour autoriser un réseau entier (recommandé pour les réseaux locaux) :
+
+1. Dans la section **"Plages d'adresses IP autorisées"**
+2. Saisir la **base** de la plage (ex: `10.131.100`)
+3. Définir le **début** et la **fin** de la plage (ex: 1 à 254)
+4. Cliquer sur **"Ajouter"**
+
+**Exemple :**
+- Base : `10.131.100`
+- Début : `1`
+- Fin : `254`
+- Résultat : Autorise toutes les IPs de `10.131.100.1` à `10.131.100.254`
+
+##### 4. Enregistrer la configuration
+
+Après avoir configuré les IPs et plages :
+1. Cliquer sur **"Enregistrer la configuration"**
+2. La configuration est appliquée **immédiatement** (pas besoin de redémarrer)
+
+#### Configuration par défaut
+
+Lors de la première initialisation, la configuration par défaut inclut :
+- **Restriction désactivée** : Tous les postes peuvent accéder
+- **IPs par défaut** : `127.0.0.1`, `::1`, `::ffff:127.0.0.1` (localhost)
+- **Plage par défaut** : `10.131.100.1` à `10.131.100.254`
+
+#### Précautions importantes
+
+⚠️ **Avant d'activer la restriction :**
+
+1. **Vérifiez votre adresse IP** : Assurez-vous de connaître l'adresse IP du poste depuis lequel vous configurez
+2. **Ajoutez votre IP** : Ajoutez votre propre adresse IP dans la liste autorisée AVANT d'activer
+3. **Testez avec une plage** : Pour un réseau local, utilisez une plage plutôt que des IPs individuelles
+4. **Gardez localhost** : Conservez toujours `127.0.0.1` dans la liste pour l'accès local
+
+⚠️ **Si vous vous êtes bloqué :**
+
+Si vous activez la restriction et que vous ne pouvez plus accéder :
+1. Redémarrer le serveur peut réinitialiser temporairement la configuration
+2. Modifier directement la base de données (avancé) : Table `config`, clés `security_enabled`, `security_allowedIPs`, `security_allowedRanges`
+
+#### Application de la restriction
+
+La restriction s'applique à :
+- ✅ **Toutes les requêtes HTTP** (API, pages web)
+- ✅ **Connexions Socket.IO** (communication temps réel)
+- ✅ **Tous les utilisateurs** (même administrateurs)
+
+La restriction est vérifiée **avant** l'authentification, donc même avec des identifiants valides, l'accès sera refusé si l'IP n'est pas autorisée.
+
+#### Logs et débogage
+
+Les tentatives d'accès refusées sont enregistrées dans les logs du serveur :
+```
+🚫 Accès refusé depuis IP non autorisée: 192.168.1.50 - GET /api/students
+```
+
+Ces logs permettent d'identifier les tentatives d'accès non autorisées.
 
 ## 🐛 Dépannage
 
@@ -418,5 +556,5 @@ Pour signaler un bug ou demander une fonctionnalité, utilisez les [Issues GitHu
 
 ---
 
-**Version actuelle** : 1.0.2  
+**Version actuelle** : 1.0.3  
 **Dernière mise à jour** : 2025

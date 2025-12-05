@@ -346,10 +346,11 @@ function createMenu() {
                 {
                     label: 'À propos de PERMAPPEL',
                     click: () => {
+                        const version = app.getVersion();
                         dialog.showMessageBox(mainWindow, {
                             type: 'info',
                             title: 'À propos de PERMAPPEL',
-                            message: 'PERMAPPEL v1.0.0',
+                            message: `PERMAPPEL v${version}`,
                             detail: 'Application d\'appel d\'élèves\n\nDéveloppé avec Electron et Node.js'
                         });
                     }

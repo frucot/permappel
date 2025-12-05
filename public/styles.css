@@ -1428,6 +1428,142 @@
         color: var(--text-secondary);
     }
 
+    /* Annuler width: 100% pour les boutons de la page Administration */
+    #adminPage .btn {
+        width: auto;
+    }
+
+    /* ===== GESTION DE LA SÉCURITÉ ===== */
+    .security-mgmt {
+        margin-top: 1rem;
+    }
+
+    .security-controls {
+        margin-bottom: 1.5rem;
+    }
+
+    .security-controls label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    .security-controls input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    .security-section {
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #e9ecef;
+    }
+
+    .security-section h4 {
+        margin-bottom: 1rem;
+        color: var(--text-primary);
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .ip-list-container,
+    .ip-range-list-container {
+        margin-top: 1rem;
+    }
+
+    .ip-list,
+    .ip-range-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 0.5rem;
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+    }
+
+    .ip-item,
+    .ip-range-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        transition: background-color 0.2s;
+    }
+
+    .ip-item:hover,
+    .ip-range-item:hover {
+        background-color: #f8f9fa;
+    }
+
+    .ip-value,
+    .range-value {
+        font-family: 'Courier New', monospace;
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .ip-input-group,
+    .ip-range-input-group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .ip-input-group input,
+    .ip-range-input-group input {
+        padding: 0.5rem;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        font-size: 0.9rem;
+    }
+
+    .ip-input-group input {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .ip-range-input-group input[type="text"] {
+        flex: 2;
+        min-width: 150px;
+    }
+
+    .ip-range-input-group input[type="number"] {
+        width: 80px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 1.5rem;
+        color: var(--text-secondary);
+        font-style: italic;
+    }
+
+    .security-actions {
+        margin-top: 2rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid #e9ecef;
+    }
+
+    .security-actions .btn {
+        padding: 0.75rem 1.5rem;
+        font-size: 0.9rem;
+    }
+
     /* ===== STYLES TABLEAU DE BORD ===== */
     .dashboard-section {
         margin-bottom: 2rem;
