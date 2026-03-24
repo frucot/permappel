@@ -401,7 +401,8 @@ class PermappelServer {
             });
 
             socket.on('leave-attendance', (data) => {
-                const { attendanceId } = data;
+                // Gérer les deux formats : { attendanceId } ou directement attendanceId
+                const attendanceId = data?.attendanceId || data;
                 socket.leave(`attendance-${attendanceId}`);
                 
                 if (this.activeAttendances.has(attendanceId)) {
@@ -454,6 +455,31 @@ class PermappelServer {
                         message: 'Erreur lors de la mise à jour' 
                     });
                 }
+            });
+
+            // Gestion des messages de chat
+            socket.on('attendance-chat-message', (data) => {
+                if (!socket.userId || !socket.userName) return;
+                
+                const { attendanceId, message } = data;
+                
+                // Vérifier que l'utilisateur est bien dans cette feuille d'appel
+                if (!this.activeAttendances.has(attendanceId) || 
+                    !this.activeAttendances.get(attendanceId).has(socket.userId)) {
+                    console.warn(`⚠️ Tentative d'envoi de message depuis un utilisateur non connecté à la feuille ${attendanceId}`);
+                    return;
+                }
+                
+                // Diffuser le message à tous les utilisateurs de cette feuille d'appel
+                this.io.to(`attendance-${attendanceId}`).emit('attendance-chat-message', {
+                    attendanceId: attendanceId,
+                    userId: socket.userId,
+                    userName: socket.userName,
+                    message: message,
+                    timestamp: new Date()
+                });
+                
+                console.log(`💬 Message de chat diffusé pour la feuille ${attendanceId} par ${socket.userName}`);
             });
 
             // Déconnexion
