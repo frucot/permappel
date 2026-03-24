@@ -96,6 +96,21 @@
         .connected-users i {
             color: var(--success-color);
         }
+
+        .chat-open-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .chat-open-btn:hover {
+            background: var(--background-color);
+            color: var(--primary-color);
+        }
         
         /* Styles pour la popup de chat */
         .chat-popup {
@@ -825,6 +840,9 @@
                 <div class="connected-users" id="connectedUsers">
                     <i class="fas fa-users"></i>
                     <span>Utilisateurs connectés: <span id="userCount">0</span></span>
+                    <button class="chat-open-btn" onclick="toggleChatPopup(); event.stopPropagation();" title="Ouvrir la discussion">
+                        <i class="fas fa-comments"></i>
+                    </button>
                     <div class="user-list" id="userList"></div>
                     <!-- Popup de chat -->
                     <div id="chatPopup" class="chat-popup" style="display: none;">
@@ -834,7 +852,7 @@
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
-                        <div class="chat-popup-body">
+                        <div id="chatPopupBody" class="chat-popup-body">
                             <div id="chatMessages" class="chat-messages">
                                 <!-- Les messages seront ajoutes ici -->
                             </div>

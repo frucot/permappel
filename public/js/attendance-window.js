@@ -837,6 +837,11 @@ function setupConnectedUsersEvents() {
                 return;
             }
 
+            // Le bouton dédié ouvre/ferme le chat, ne pas toggler la liste utilisateurs
+            if (e.target.closest('.chat-open-btn')) {
+                return;
+            }
+
             // Le bouton de fermeture du chat gere deja le toggle lui-meme
             if (e.target.closest('.chat-close-btn')) {
                 return;
@@ -980,9 +985,9 @@ function displayChatMessage(data) {
 
 // Scroll automatique vers le bas du chat
 function scrollChatToBottom() {
-    const chatMessagesContainer = document.getElementById('chatMessages');
-    if (chatMessagesContainer) {
-        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    const chatScrollableContainer = document.getElementById('chatPopupBody');
+    if (chatScrollableContainer) {
+        chatScrollableContainer.scrollTop = chatScrollableContainer.scrollHeight;
     }
 }
 
