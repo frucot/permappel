@@ -10,6 +10,7 @@ PERMAPPEL est une application de gestion des appels scolaires développée avec 
 - **Création d'appels** avec sélection de créneaux, classes et groupes
 - **Appels récurrents** (hebdomadaire, bi-hebdomadaire)
 - **Feuilles d'appel en temps réel** avec synchronisation Socket.IO
+- **Chat collaboratif par feuille d'appel** pour échanger entre utilisateurs connectés
 - **Synchronisation automatique** des élèves (ajout/suppression selon critères)
 - **Mode lecture seule** pour les appels passés
 - **Export PDF** des feuilles d'appel
@@ -245,10 +246,17 @@ Les fichiers générés se trouvent dans le dossier `dist/` :
 **Fonctionnalités disponibles :**
 - **Marquer les présences** : Cliquer sur les boutons (Présent, Absent, CDI, Excusé)
 - **Synchronisation automatique** : Les modifications sont visibles en temps réel par tous les utilisateurs
+- **Chat de la feuille d'appel** : Permet aux utilisateurs connectés à la même feuille d'échanger des messages en temps réel
 - **Ajouter des groupes/classes** : Bouton "Ajouter des groupes" ou "Ajouter des classes"
 - **Synchroniser les élèves** : Bouton "Synchroniser les élèves" pour ajouter/supprimer automatiquement selon les critères
 - **Vérifier l'appel** : Vérifier qu'aucun élève n'a été oublié
 - **Export PDF** : Générer un PDF de la feuille d'appel
+
+**Utiliser le chat dans une feuille d'appel :**
+1. Ouvrir la feuille d'appel concernée
+2. Saisir un message dans la zone de chat
+3. Envoyer le message pour qu'il soit visible instantanément par les autres utilisateurs connectés à cette feuille
+4. Utiliser le chat pour coordonner les mises à jour de présence et partager les informations de suivi
 
 **Synchronisation automatique des élèves :**
 - À l'ouverture d'une feuille d'appel, les élèves sont automatiquement synchronisés
