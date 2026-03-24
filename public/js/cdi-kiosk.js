@@ -29,6 +29,8 @@ let selectedStudent = null;
 let suggestionsCache = [];
 /** Incrémenté à chaque saisie : ignore les réponses d’autocomplete arrivées hors ordre. */
 let studentSearchSeq = 0;
+/** Annule la requête autocomplete précédente dès qu’une nouvelle saisie part. */
+let studentSearchAbortController = null;
 
 const ui = {
     currentDate: document.getElementById('currentDate'),
@@ -126,11 +128,19 @@ async function loadActivities() {
     }
 }
 
+function abortPendingStudentSearch() {
+    if (studentSearchAbortController) {
+        studentSearchAbortController.abort();
+        studentSearchAbortController = null;
+    }
+}
+
 async function onStudentSearchInput(event) {
     const seq = ++studentSearchSeq;
     const value = event.target.value.trim();
 
     if (value.length < 1) {
+        abortPendingStudentSearch();
         selectedStudent = null;
         ui.studentPreview.textContent = '';
         ui.studentsSuggestions.innerHTML = '';
@@ -142,6 +152,7 @@ async function onStudentSearchInput(event) {
     // la valeur complète ne correspond pas au préfixe de recherche — ne pas vider le cache ni rappeler l’API.
     const fromDatalist = studentFromDatalistOptionValue(value);
     if (fromDatalist) {
+        abortPendingStudentSearch();
         selectedStudent = fromDatalist;
         ui.studentPreview.textContent =
             `Élève sélectionné: ${fromDatalist.prenom} ${fromDatalist.nom} (${fromDatalist.classe})`;
@@ -151,9 +162,14 @@ async function onStudentSearchInput(event) {
     selectedStudent = null;
     ui.studentPreview.textContent = '';
 
+    abortPendingStudentSearch();
+    studentSearchAbortController = new AbortController();
+    const { signal } = studentSearchAbortController;
+
     try {
         const data = await fetchJsonOrThrow(
-            `${studentsApi}/autocomplete?q=${encodeURIComponent(value)}`
+            `${studentsApi}/autocomplete?q=${encodeURIComponent(value)}`,
+            { signal }
         );
         if (seq !== studentSearchSeq) {
             return;
@@ -173,6 +189,9 @@ async function onStudentSearchInput(event) {
             ui.studentsSuggestions.appendChild(option);
         });
     } catch (error) {
+        if (error.name === 'AbortError') {
+            return;
+        }
         if (seq !== studentSearchSeq) {
             return;
         }
