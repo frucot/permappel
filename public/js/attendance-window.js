@@ -7,6 +7,8 @@ let isConnected = false;
 let refreshInterval = null;
 let connectedUsers = new Map();
 let isReadOnlyMode = false;
+let isSocketAuthenticated = false;
+let hasJoinedCurrentAttendance = false;
 
 // Détection du navigateur
 function detectBrowser() {
@@ -80,8 +82,10 @@ async function initializeApp() {
     await checkAuthStatus();
     await loadAttendance(attendanceId);
     
-    // Ajouter les événements pour les utilisateurs connectés
+    // Ajouter les événements pour les utilisateurs connectés et le chat
     setupConnectedUsersEvents();
+    setupChatInputEvents();
+    joinAttendanceIfReady();
 }
 
 // Configuration des listeners Socket.IO
@@ -104,22 +108,8 @@ function setupSocketListeners() {
     // Gérer l'authentification réussie
     socket.on('authenticated', (data) => {
         console.log('✅ Socket.IO authentifié:', data.user);
-        
-        if (currentAttendance && currentUser && currentUser.id) {
-            const userName = currentUser ? `${currentUser.prenom || currentUser.firstName || ''} ${currentUser.nom || currentUser.lastName || ''}`.trim() || 'Utilisateur' : 'Utilisateur';
-            console.log('🔗 Reconnexion à la feuille d\'appel:', { attendanceId: currentAttendance.id, userId: currentUser.id, userName });
-            
-            socket.emit('join-attendance', {
-                attendanceId: currentAttendance.id,
-                userId: currentUser.id,
-                userName: userName
-            });
-            
-            // S'ajouter à la liste des utilisateurs connectés
-            setTimeout(() => {
-                addConnectedUser(currentUser.id, userName);
-            }, 100); // Petit délai pour s'assurer que le serveur traite la connexion
-        }
+        isSocketAuthenticated = true;
+        joinAttendanceIfReady();
     });
     
     // Gérer les erreurs d'authentification
@@ -130,6 +120,8 @@ function setupSocketListeners() {
     socket.on('disconnect', () => {
         console.log('Déconnecté du serveur');
         isConnected = false;
+        isSocketAuthenticated = false;
+        hasJoinedCurrentAttendance = false;
         updateSyncStatus(false);
         
         // Nettoyer la liste des utilisateurs connectés en cas de déconnexion
@@ -176,6 +168,46 @@ function setupSocketListeners() {
         updateConnectedUsersDisplay();
         console.log(`🔗 Liste synchronisée: ${connectedUsers.size} utilisateurs connectés`);
     });
+    
+    // Écouter les messages de chat
+    socket.on('attendance-chat-message', (data) => {
+        console.log('💬 Message de chat reçu:', data);
+        if (data.attendanceId === currentAttendance?.id) {
+            displayChatMessage(data);
+        }
+    });
+}
+
+function joinAttendanceIfReady() {
+    if (!socket || !isConnected || !isSocketAuthenticated || !currentAttendance || !currentUser?.id || hasJoinedCurrentAttendance) {
+        return;
+    }
+
+    const userName = `${currentUser.prenom || currentUser.firstName || ''} ${currentUser.nom || currentUser.lastName || ''}`.trim() || 'Utilisateur';
+    console.log('🔗 Rejoindre la feuille d\'appel:', { attendanceId: currentAttendance.id, userId: currentUser.id, userName });
+
+    socket.emit('join-attendance', {
+        attendanceId: currentAttendance.id,
+        userId: currentUser.id,
+        userName
+    });
+
+    // Ajout local immediat pour eviter d'attendre le broadcast serveur
+    addConnectedUser(currentUser.id, userName);
+    hasJoinedCurrentAttendance = true;
+}
+
+// Gérer l'envoi de message avec Enter
+function setupChatInputEvents() {
+    const chatInput = document.getElementById('chatInput');
+    if (!chatInput || chatInput.dataset.enterHandlerAttached === 'true') return;
+    
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendChatMessage();
+        }
+    });
+    chatInput.dataset.enterHandlerAttached = 'true';
 }
 
 // Vérifier le statut d'authentification
@@ -243,14 +275,17 @@ async function loadAttendance(attendanceId) {
             throw new Error(`Erreur HTTP: ${response.status}`);
         }
         
+        const previousAttendanceId = currentAttendance?.id;
         const data = await response.json();
         currentAttendance = data.attendance;
+        const nextAttendanceId = currentAttendance?.id;
+        if (previousAttendanceId !== nextAttendanceId) {
+            hasJoinedCurrentAttendance = false;
+        }
         
         displayAttendance(currentAttendance);
         showLoading(false);
-        
-        // L'utilisateur rejoindra la feuille d'appel après l'authentification Socket.IO
-        // Voir l'événement 'authenticated' dans setupSocketListeners()
+        joinAttendanceIfReady();
         
         startAutoRefresh();
     } catch (error) {
@@ -787,32 +822,192 @@ function removeConnectedUser(userId) {
     updateConnectedUsersDisplay();
 }
 
+// Variables pour le chat
+let chatMessages = [];
+let hasNewChatMessage = false;
+let isChatOpen = false;
+
 function setupConnectedUsersEvents() {
     const connectedUsersElement = document.getElementById('connectedUsers');
+    const userListEl = document.getElementById('userList');
     if (connectedUsersElement) {
         connectedUsersElement.addEventListener('click', (e) => {
+            // Ignorer les clics internes a la popup de chat
+            if (e.target.closest('#chatPopup')) {
+                return;
+            }
+
+            // Le bouton dédié ouvre/ferme le chat, ne pas toggler la liste utilisateurs
+            if (e.target.closest('.chat-open-btn')) {
+                return;
+            }
+
+            // Le bouton de fermeture du chat gere deja le toggle lui-meme
+            if (e.target.closest('.chat-close-btn')) {
+                return;
+            }
+
             e.stopPropagation();
-            // Le userList est défini dans la structure DOM
-            const userListEl = document.getElementById('userList');
-            const userCountEl = document.getElementById('userCount');
-            if (userListEl && userCountEl) {
+
+            // Restaurer le comportement d'origine: afficher/masquer la liste utilisateurs
+            if (userListEl) {
                 const isVisible = userListEl.style.display === 'block';
                 userListEl.style.display = isVisible ? 'none' : 'block';
-                
                 if (!isVisible && elements.userList) {
                     updateConnectedUsersDisplay();
                 }
             }
         });
     }
-    
+
     // Fermer la liste en cliquant ailleurs
     document.addEventListener('click', (e) => {
-        const tooltip = document.getElementById('userList');
-        if (tooltip && !document.getElementById('connectedUsers')?.contains(e.target) && !tooltip.contains(e.target)) {
-            tooltip.style.display = 'none';
+        if (!userListEl || !connectedUsersElement) return;
+        if (!connectedUsersElement.contains(e.target)) {
+            userListEl.style.display = 'none';
         }
     });
+}
+
+// Toggle la popup de chat
+function toggleChatPopup() {
+    const chatPopup = document.getElementById('chatPopup');
+    if (!chatPopup) return;
+    
+    isChatOpen = !isChatOpen;
+    chatPopup.style.display = isChatOpen ? 'flex' : 'none';
+    
+    if (isChatOpen) {
+        // Attendre le prochain frame pour garantir des dimensions calculees
+        requestAnimationFrame(() => {
+            if (isChatOpen) {
+                positionChatPopup();
+            }
+        });
+        // Réinitialiser la notification quand on ouvre le chat
+        hasNewChatMessage = false;
+        updateChatNotification();
+        // Focus sur l'input
+        const chatInput = document.getElementById('chatInput');
+        if (chatInput) {
+            setTimeout(() => chatInput.focus(), 100);
+        }
+        // Scroll vers le bas
+        scrollChatToBottom();
+    }
+}
+
+function positionChatPopup() {
+    const chatPopup = document.getElementById('chatPopup');
+    const trigger = document.getElementById('connectedUsers');
+    if (!chatPopup || !trigger) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const popupRect = chatPopup.getBoundingClientRect();
+    const computedStyles = window.getComputedStyle(chatPopup);
+    let popupWidth = popupRect.width || chatPopup.offsetWidth || parseFloat(computedStyles.width) || 400;
+    let popupHeight = popupRect.height || chatPopup.offsetHeight || parseFloat(computedStyles.height) || parseFloat(computedStyles.minHeight) || 300;
+    const margin = 10;
+
+    if (popupWidth <= 0 || popupHeight <= 0) {
+        // Dernier filet de securite pour eviter un positionnement a (0, 0)
+        popupWidth = 400;
+        popupHeight = 300;
+    }
+
+    let left = triggerRect.right - popupWidth;
+    left = Math.max(margin, Math.min(left, window.innerWidth - popupWidth - margin));
+
+    let top = triggerRect.top - popupHeight - margin;
+    if (top < margin) {
+        top = Math.min(window.innerHeight - popupHeight - margin, triggerRect.bottom + margin);
+    }
+
+    chatPopup.style.left = `${left}px`;
+    chatPopup.style.top = `${Math.max(margin, top)}px`;
+}
+
+window.addEventListener('resize', () => {
+    if (isChatOpen) {
+        positionChatPopup();
+    }
+});
+
+// Envoyer un message de chat
+function sendChatMessage() {
+    const chatInput = document.getElementById('chatInput');
+    if (!chatInput || !socket || !currentAttendance || !currentUser) return;
+    
+    const message = chatInput.value.trim();
+    if (!message) return;
+    
+    // Construire le nom d'utilisateur avec fallback (même pattern que ligne 109)
+    const userName = currentUser ? `${currentUser.prenom || currentUser.firstName || ''} ${currentUser.nom || currentUser.lastName || ''}`.trim() || 'Utilisateur' : 'Utilisateur';
+    
+    // Envoyer le message via Socket.IO
+    socket.emit('attendance-chat-message', {
+        attendanceId: currentAttendance.id,
+        message: message,
+        userId: currentUser.id,
+        userName: userName
+    });
+    
+    // Vider l'input
+    chatInput.value = '';
+}
+
+// Afficher un message dans le chat
+function displayChatMessage(data) {
+    const chatMessagesContainer = document.getElementById('chatMessages');
+    if (!chatMessagesContainer) return;
+    
+    const isOwnMessage = data.userId === currentUser?.id;
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${isOwnMessage ? 'own-message' : 'other-message'}`;
+    
+    messageDiv.innerHTML = `
+        <div class="chat-message-author">${escapeHtml(data.userName || 'Utilisateur')}</div>
+        <div class="chat-message-text">${escapeHtml(data.message)}</div>
+    `;
+    
+    chatMessagesContainer.appendChild(messageDiv);
+    chatMessages.push(data);
+    
+    // Scroll automatique vers le bas
+    scrollChatToBottom();
+    
+    // Si le chat n'est pas ouvert, afficher la notification
+    if (!isChatOpen) {
+        hasNewChatMessage = true;
+        updateChatNotification();
+    }
+}
+
+// Scroll automatique vers le bas du chat
+function scrollChatToBottom() {
+    const chatScrollableContainer = document.getElementById('chatPopupBody');
+    if (chatScrollableContainer) {
+        chatScrollableContainer.scrollTop = chatScrollableContainer.scrollHeight;
+    }
+}
+
+// Mettre à jour la notification visuelle sur le bouton
+function updateChatNotification() {
+    const connectedUsersElement = document.getElementById('connectedUsers');
+    if (!connectedUsersElement) return;
+    
+    if (hasNewChatMessage && !isChatOpen) {
+        connectedUsersElement.classList.add('has-new-message');
+    } else {
+        connectedUsersElement.classList.remove('has-new-message');
+    }
+}
+
+// Fonction utilitaire pour échapper le HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 function updateConnectedUsersDisplay() {
@@ -919,8 +1114,10 @@ function showNotification(message, type = 'success') {
     }, type === 'info' ? 5000 : 3000); // Plus long pour les notifications info
 }
 
-// Exposer la fonction globalement pour le bouton HTML
+// Exposer les fonctions globalement pour les boutons HTML
 window.syncStudentsManually = syncStudentsManually;
+window.toggleChatPopup = toggleChatPopup;
+window.sendChatMessage = sendChatMessage;
 
 // Activer le mode lecture seule
 function enableReadOnlyMode() {
@@ -1580,8 +1777,10 @@ window.addEventListener('beforeunload', (e) => {
     // Si la fermeture est forcée, ne pas empêcher
     if (forceClose) {
         if (currentAttendance && isConnected) {
-            socket.emit('leave-attendance', currentAttendance.id);
+            socket.emit('leave-attendance', { attendanceId: currentAttendance.id });
         }
+        // Nettoyer les messages de chat
+        chatMessages = [];
         return;
     }
     
@@ -1595,8 +1794,11 @@ window.addEventListener('beforeunload', (e) => {
     }
     
     if (currentAttendance && isConnected) {
-        socket.emit('leave-attendance', currentAttendance.id);
+        socket.emit('leave-attendance', { attendanceId: currentAttendance.id });
     }
+    
+    // Nettoyer les messages de chat à la fermeture
+    chatMessages = [];
 });
 
 // Ajouter les styles d'animation

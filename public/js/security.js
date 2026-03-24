@@ -207,6 +207,12 @@ function removeIPRange(index) {
 // Sauvegarder la configuration de sécurité
 async function saveSecurityConfig() {
     try {
+        const token = localStorage.getItem('token');
+        if (!token || !token.trim()) {
+            showNotification('Session invalide. Veuillez vous reconnecter avant de sauvegarder.', 'error');
+            return;
+        }
+
         const enabledCheckbox = document.getElementById('securityEnabled');
         const enabled = enabledCheckbox ? enabledCheckbox.checked : false;
         
@@ -219,7 +225,8 @@ async function saveSecurityConfig() {
         const response = await fetch(`${API_BASE_URL}/api/admin/security`, {
             method: 'PUT',
             headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify(config)
         });
