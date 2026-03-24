@@ -1,6 +1,6 @@
 {
   "name": "permappel",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Application d'appel d'élèves PERMAPPEL",
   "main": "main.js",
   "homepage": "./",
@@ -13,10 +13,7 @@
     "dev": "electron . --dev",
     "server": "cd server && npm start",
     "postinstall": "cd server && npm install",
-    "init-db": "node init-database.js",
-    "test": "node test-app.js",
-    "clean": "node cleanup.bat",
-    "create-icon": "node create-icon.js"
+    "init-db": "node init-database.js"
   },
   "build": {
     "appId": "com.permappel.app",
