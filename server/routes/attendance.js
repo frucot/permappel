@@ -870,21 +870,29 @@ module.exports = (db, io) => {
             const existingStudentIds = new Set(existingPresences.map(p => p.eleveId));
             
             // Récupérer TOUS les élèves correspondant aux critères (y compris les nouveaux)
+            // IMPORTANT: la création de feuille d'appel utilise une union (OR) entre classes et groupes.
+            // La synchronisation doit reproduire la même logique, sinon on supprime des élèves
+            // qui étaient valides lors de la création d'origine.
             let elevesQuery = 'SELECT * FROM eleves WHERE COALESCE(actif, 1) = 1';
             const elevesParams = [];
-            
+            const orConditions = [];
+
             if (classes.length > 0) {
-                elevesQuery += ' AND classe IN (' + classes.map(() => '?').join(',') + ')';
+                orConditions.push('classe IN (' + classes.map(() => '?').join(',') + ')');
                 elevesParams.push(...classes);
             }
-            
+
             if (groups.length > 0) {
-                elevesQuery += ` AND id IN (
+                orConditions.push(`id IN (
                     SELECT DISTINCT eleveId FROM eleves_groupes eg
                     JOIN groupes g ON eg.groupeId = g.id
                     WHERE g.nom IN (${groups.map(() => '?').join(',')})
-                )`;
+                )`);
                 elevesParams.push(...groups);
+            }
+
+            if (orConditions.length > 0) {
+                elevesQuery += ' AND (' + orConditions.join(' OR ') + ')';
             }
             
             const allEligibleStudents = await db.executeQuery(elevesQuery, elevesParams);
