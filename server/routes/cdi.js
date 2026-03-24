@@ -56,7 +56,9 @@ module.exports = (db, io) => {
         }
     });
 
-    router.get('/kiosk-status', enforceKioskIPRestriction, async (req, res) => {
+    // Pas de enforceKioskIPRestriction ici : une IP non autorisée doit recevoir 200 +
+    // { authorized: false } pour que la borne affiche le message et désactive l’envoi.
+    router.get('/kiosk-status', async (req, res) => {
         try {
             const securityConfig = await getCdiKioskSecurityConfig();
             const clientIP = normalizeIP(
