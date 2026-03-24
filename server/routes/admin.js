@@ -1,7 +1,41 @@
 const express = require('express');
 const router = express.Router();
+const createCdiKioskIpHelpers = require('../middleware/cdiKioskIpRestriction');
 
 module.exports = (db, serverInstance) => {
+    const { getCdiKioskSecurityConfig, normalizeIP } = createCdiKioskIpHelpers(db);
+
+    async function requireNonEleveStaff(req, res, next) {
+        try {
+            const authHeader = req.headers.authorization || '';
+            const token = authHeader.startsWith('Bearer ')
+                ? authHeader.replace('Bearer ', '').trim()
+                : null;
+            if (!token) {
+                return res.status(401).json({ success: false, message: 'Authentification requise' });
+            }
+            const users = await db.executeQuery(
+                'SELECT id, role, actif FROM utilisateurs WHERE id = ?',
+                [token]
+            );
+            if (!users.length || users[0].actif !== 1) {
+                return res.status(401).json({ success: false, message: 'Session invalide' });
+            }
+            if (users[0].role === 'eleve') {
+                return res.status(403).json({ success: false, message: 'Accès refusé' });
+            }
+            next();
+        } catch (error) {
+            console.error('Erreur auth statut borne (admin):', error);
+            res.status(500).json({ success: false, message: 'Erreur serveur' });
+        }
+    }
+    const allowedRoles = new Set(['admin', 'aed', 'cpe', 'documentaliste', 'eleve']);
+    const cdiDefaultConfig = {
+        enabled: false,
+        allowedIPs: ['127.0.0.1']
+    };
+
     // Obtenir tous les utilisateurs
     router.get('/users', async (req, res) => {
         try {
@@ -66,6 +100,13 @@ module.exports = (db, serverInstance) => {
                 });
             }
 
+            if (!allowedRoles.has(role)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Rôle utilisateur invalide'
+                });
+            }
+
             const bcrypt = require('bcrypt');
             const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -94,6 +135,13 @@ module.exports = (db, serverInstance) => {
         try {
             const { id } = req.params;
             const { username, email, role, firstName, lastName, password } = req.body;
+
+            if (!allowedRoles.has(role)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Rôle utilisateur invalide'
+                });
+            }
             
             let query = `
                 UPDATE utilisateurs 
@@ -593,6 +641,129 @@ module.exports = (db, serverInstance) => {
             });
         } catch (error) {
             console.error('Erreur sauvegarde configuration sécurité:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Erreur serveur'
+            });
+        }
+    });
+
+    // Statut IP côté poste admin (équivalent à /cdi/kiosk-status, sans exposition publique)
+    router.get('/cdi-kiosk-self-status', requireNonEleveStaff, async (req, res) => {
+        try {
+            const securityConfig = await getCdiKioskSecurityConfig();
+            const clientIP = normalizeIP(
+                req.ip ||
+                req.headers['x-forwarded-for'] ||
+                req.connection?.remoteAddress ||
+                req.socket?.remoteAddress
+            );
+            const authorized = !securityConfig.enabled || securityConfig.allowedIPs.includes(clientIP);
+            res.json({
+                success: true,
+                restrictionEnabled: securityConfig.enabled,
+                authorized,
+                clientIP
+            });
+        } catch (error) {
+            console.error('Erreur statut IP borne (admin):', error);
+            res.status(500).json({ success: false, message: 'Erreur serveur' });
+        }
+    });
+
+    // Obtenir la configuration IP des bornes CDI
+    router.get('/cdi-kiosk-security', async (req, res) => {
+        try {
+            const configRows = await db.executeQuery(
+                `SELECT cle, valeur FROM config WHERE cle IN ('cdi_kiosk_ip_restriction_enabled', 'cdi_kiosk_allowed_ips')`
+            );
+
+            let enabled = cdiDefaultConfig.enabled;
+            let allowedIPs = [...cdiDefaultConfig.allowedIPs];
+
+            configRows.forEach(row => {
+                if (row.cle === 'cdi_kiosk_ip_restriction_enabled') {
+                    enabled = row.valeur === 'true' || row.valeur === '1';
+                }
+                if (row.cle === 'cdi_kiosk_allowed_ips') {
+                    try {
+                        const parsed = JSON.parse(row.valeur || '[]');
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            allowedIPs = parsed;
+                        }
+                    } catch (error) {
+                        allowedIPs = [...cdiDefaultConfig.allowedIPs];
+                    }
+                }
+            });
+
+            // Initialisation des clés si absentes
+            await db.executeQuery(
+                `INSERT OR IGNORE INTO config (cle, valeur, description) VALUES (?, ?, ?)`,
+                ['cdi_kiosk_ip_restriction_enabled', enabled.toString(), 'Activer la restriction IP des bornes CDI']
+            );
+            await db.executeQuery(
+                `INSERT OR IGNORE INTO config (cle, valeur, description) VALUES (?, ?, ?)`,
+                ['cdi_kiosk_allowed_ips', JSON.stringify(allowedIPs), 'Liste des IPs autorisées pour les bornes CDI (JSON array)']
+            );
+
+            res.json({
+                success: true,
+                config: { enabled, allowedIPs }
+            });
+        } catch (error) {
+            console.error('Erreur récupération configuration bornes CDI:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Erreur serveur'
+            });
+        }
+    });
+
+    // Sauvegarder la configuration IP des bornes CDI
+    router.put('/cdi-kiosk-security', async (req, res) => {
+        try {
+            const { enabled, allowedIPs } = req.body;
+
+            if (typeof enabled !== 'boolean') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Le paramètre enabled doit être un booléen'
+                });
+            }
+
+            if (!Array.isArray(allowedIPs) || allowedIPs.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Au moins une IP de borne CDI est requise'
+                });
+            }
+
+            const ipRegex = /^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.|$)){4}$|^::1$|^::ffff:((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.|$)){4}$/;
+            for (const ip of allowedIPs) {
+                if (typeof ip !== 'string' || !ipRegex.test(ip.trim())) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Adresse IP invalide: ${ip}`
+                    });
+                }
+            }
+
+            await db.executeQuery(
+                `INSERT OR REPLACE INTO config (cle, valeur, description, modifieLe) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+                ['cdi_kiosk_ip_restriction_enabled', enabled.toString(), 'Activer la restriction IP des bornes CDI']
+            );
+            await db.executeQuery(
+                `INSERT OR REPLACE INTO config (cle, valeur, description, modifieLe) VALUES (?, ?, ?, CURRENT_TIMESTAMP)`,
+                ['cdi_kiosk_allowed_ips', JSON.stringify(allowedIPs), 'Liste des IPs autorisées pour les bornes CDI (JSON array)']
+            );
+
+            res.json({
+                success: true,
+                message: 'Configuration des bornes CDI sauvegardée avec succès'
+            });
+        } catch (error) {
+            console.error('Erreur sauvegarde configuration bornes CDI:', error);
             res.status(500).json({
                 success: false,
                 message: 'Erreur serveur'

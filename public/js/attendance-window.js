@@ -130,8 +130,24 @@ function setupSocketListeners() {
     });
     
     socket.on('student-status-updated', (data) => {
-        if (data.attendanceId === currentAttendance?.id) {
+        if (!data.attendanceId || data.attendanceId === currentAttendance?.id) {
             updateStudentStatusFromSocket(data);
+            refreshAttendanceData();
+        }
+    });
+
+    socket.on('cdi-checkin-updated', (data) => {
+        if (data.attendanceId === currentAttendance?.id) {
+            updateStudentStatusLocal(data.studentId, 'Présent_CDI');
+            updateAttendanceStats(currentAttendance);
+            showNotification(`Nouvelle inscription CDI (${data.activity || 'activité non précisée'})`, 'info');
+            refreshAttendanceData();
+        }
+    });
+
+    socket.on('attendance-students-updated', (data) => {
+        if (data.attendanceId === currentAttendance?.id) {
+            console.log('🔄 Événement attendance-students-updated reçu:', data);
             refreshAttendanceData();
         }
     });
@@ -694,6 +710,10 @@ async function refreshAttendanceData() {
         if (response.ok) {
             const data = await response.json();
             const newAttendanceData = data.attendance;
+            const previousStudentIds = new Set((currentAttendance?.students || []).map(s => String(s._id || s.id)));
+            const nextStudentIds = new Set((newAttendanceData?.students || []).map(s => String(s._id || s.id)));
+            const studentsListChanged = previousStudentIds.size !== nextStudentIds.size ||
+                Array.from(previousStudentIds).some(id => !nextStudentIds.has(id));
             
             // Mettre à jour les données sans régénérer l'interface complète
             const oldAttendance = currentAttendance;
@@ -713,6 +733,11 @@ async function refreshAttendanceData() {
             
             const newClassNames = Array.isArray(currentAttendance.classes) ? currentAttendance.classes : [];
             displayClassesTags(newClassNames);
+
+            // Si la liste d'élèves a changé (ajout/suppression), reconstruire la table.
+            if (studentsListChanged) {
+                displayAttendance(currentAttendance);
+            }
         }
     } catch (error) {
         console.error('Erreur lors du rafraîchissement:', error);
@@ -1179,10 +1204,11 @@ async function syncStudentsManually() {
         if (syncResponse.ok) {
             const syncData = await syncResponse.json();
             if (syncData.success) {
+                // Toujours recharger pour garantir la cohérence de l'affichage local
+                // même si le backend considère qu'il n'y a pas eu de delta.
+                await loadAttendance(currentAttendance.id);
                 if (syncData.addedCount > 0 || syncData.removedCount > 0) {
                     console.log(`🔄 Synchronisation manuelle: ${syncData.addedCount} élève(s) ajouté(s), ${syncData.removedCount} élève(s) supprimé(s)`);
-                    // Recharger la feuille d'appel pour afficher les modifications
-                    await loadAttendance(currentAttendance.id);
                     showNotification(`Synchronisation réussie: ${syncData.addedCount} ajouté(s), ${syncData.removedCount} supprimé(s)`, 'success');
                 } else {
                     console.log('🔄 Synchronisation manuelle: Aucune modification nécessaire');

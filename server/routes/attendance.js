@@ -114,9 +114,11 @@ module.exports = (db, io) => {
                     e.classe as class,
                     e.regime,
                     e.autorisationSortie as exitPermissions,
+                    ac.libelle as activiteCdi,
                     GROUP_CONCAT(g.nom) as groups
                 FROM presences p
                 JOIN eleves e ON p.eleveId = e.id
+                LEFT JOIN activites_cdi ac ON ac.id = p.activiteCdiId
                 LEFT JOIN eleves_groupes eg ON e.id = eg.eleveId
                 LEFT JOIN groupes g ON eg.groupeId = g.id
                 WHERE p.feuilleAppelId = ?
@@ -173,6 +175,7 @@ module.exports = (db, io) => {
                 autorisationSortie: student.exitPermissions,
                 status: student.statut || 'NON_APPELE',
                 statut: student.statut || 'NON_APPELE',
+                activiteCdi: student.activiteCdi || null,
                 groups: student.groups ? student.groups.split(',').filter(g => g) : []
             }));
             
@@ -262,9 +265,9 @@ module.exports = (db, io) => {
             
             // Si aucune condition, récupérer tous les élèves actifs
             if (conditions.length === 0) {
-                elevesQuery += ' AND e.actif = 1';
+                elevesQuery += ' AND COALESCE(e.actif, 1) = 1';
             } else {
-                elevesQuery += ' AND (' + conditions.join(' OR ') + ') AND e.actif = 1';
+                elevesQuery += ' AND (' + conditions.join(' OR ') + ') AND COALESCE(e.actif, 1) = 1';
             }
             
             console.log('🔍 Requête élèves:', elevesQuery);
@@ -333,7 +336,7 @@ module.exports = (db, io) => {
     router.put('/:attendanceId/student/:studentId', async (req, res) => {
         try {
             const { attendanceId, studentId } = req.params;
-            const { status, notes } = req.body;
+            const { status, notes, activityId } = req.body;
             const [date, creneauId] = attendanceId.split('_');
             
             // Récupérer la feuille d'appel
@@ -349,9 +352,13 @@ module.exports = (db, io) => {
             // Mettre à jour la présence
             await db.executeQuery(`
                 UPDATE presences 
-                SET statut = ?, notes = ?, modifieLe = CURRENT_TIMESTAMP, modifiePar = ?
+                SET statut = ?,
+                    notes = ?,
+                    activiteCdiId = ?,
+                    modifieLe = CURRENT_TIMESTAMP,
+                    modifiePar = ?
                 WHERE feuilleAppelId = ? AND eleveId = ?
-            `, [status, notes, 1, feuille[0].id, studentId]);
+            `, [status, notes, activityId || null, 1, feuille[0].id, studentId]);
             
             // Émettre la mise à jour via Socket.IO
             if (io) {
@@ -468,6 +475,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'groups-added'
+                });
+            }
         } catch (error) {
             console.error('Erreur ajout groupes:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -585,6 +599,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'group-removed'
+                });
+            }
         } catch (error) {
             console.error('Erreur suppression groupe:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur: ' + error.message });
@@ -687,6 +708,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'classes-added'
+                });
+            }
         } catch (error) {
             console.error('Erreur ajout classes:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -801,6 +829,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'class-removed'
+                });
+            }
         } catch (error) {
             console.error('Erreur suppression classe:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur: ' + error.message });
@@ -835,7 +870,7 @@ module.exports = (db, io) => {
             const existingStudentIds = new Set(existingPresences.map(p => p.eleveId));
             
             // Récupérer TOUS les élèves correspondant aux critères (y compris les nouveaux)
-            let elevesQuery = 'SELECT * FROM eleves WHERE actif = 1';
+            let elevesQuery = 'SELECT * FROM eleves WHERE COALESCE(actif, 1) = 1';
             const elevesParams = [];
             
             if (classes.length > 0) {
@@ -909,6 +944,15 @@ module.exports = (db, io) => {
                 removedCount: removedCount,
                 totalStudents: finalTotal
             });
+
+            if (io && (addedCount > 0 || removedCount > 0)) {
+                io.to(`attendance-${id}`).emit('attendance-students-updated', {
+                    attendanceId: id,
+                    reason: 'sync-students',
+                    addedCount,
+                    removedCount
+                });
+            }
         } catch (error) {
             console.error('Erreur lors de la synchronisation des élèves:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur lors de la synchronisation' });

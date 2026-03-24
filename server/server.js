@@ -293,10 +293,62 @@ class PermappelServer {
             res.sendFile(path.join(__dirname, '../public/index.html'));
         });
 
+        // Garde d'autorisation API pour les comptes eleve
+        this.app.use('/api', async (req, res, next) => {
+            try {
+                const authHeader = req.headers.authorization || '';
+                const token = authHeader.startsWith('Bearer ')
+                    ? authHeader.replace('Bearer ', '').trim()
+                    : null;
+
+                // Pas de token: conserver le comportement historique
+                if (!token) {
+                    return next();
+                }
+
+                const users = await this.db.executeQuery(
+                    'SELECT id, role, actif FROM utilisateurs WHERE id = ?',
+                    [token]
+                );
+                if (!users.length || users[0].actif !== 1) {
+                    return next();
+                }
+
+                const user = users[0];
+                if (user.role !== 'eleve') {
+                    return next();
+                }
+
+                // Routes autorisées pour les élèves (borne CDI uniquement)
+                const isAllowedRoute =
+                    req.path.startsWith('/auth/') ||
+                    req.path === '/auth' ||
+                    req.path.startsWith('/cdi/') ||
+                    req.path === '/cdi' ||
+                    req.path === '/students/autocomplete';
+
+                if (!isAllowedRoute) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Accès refusé: permissions insuffisantes pour ce rôle'
+                    });
+                }
+
+                next();
+            } catch (error) {
+                console.error('Erreur garde permissions API eleve:', error);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Erreur serveur'
+                });
+            }
+        });
+
         // API Routes
         this.app.use('/api/auth', require('./routes/auth')(this.db));
         this.app.use('/api/students', require('./routes/students')(this.db));
         this.app.use('/api/attendance', require('./routes/attendance')(this.db, this.io));
+        this.app.use('/api/cdi', require('./routes/cdi')(this.db, this.io));
         this.app.use('/api/schedules', require('./routes/schedules')(this.db));
         this.app.use('/api/admin', require('./routes/admin')(this.db, this));
         this.app.use('/api/export', require('./routes/export')(this.db));

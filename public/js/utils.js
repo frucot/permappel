@@ -48,7 +48,8 @@ function getRoleLabel(role) {
         'admin': 'Administrateur',
         'aed': 'AED',
         'cpe': 'CPE',
-        'documentaliste': 'Documentaliste'
+        'documentaliste': 'Documentaliste',
+        'eleve': 'Élève'
     };
     return roles[role] || role;
 }

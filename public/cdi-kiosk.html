@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Borne CDI - PERMAPPEL</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body { background: #f5f7fb; margin: 0; font-family: Arial, sans-serif; }
+        .kiosk-container { max-width: 760px; margin: 2rem auto; background: #fff; border-radius: 12px; padding: 2rem; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
+        .kiosk-topbar { display: flex; justify-content: flex-end; margin-bottom: 0.8rem; }
+        .btn-logout { border: none; border-radius: 8px; background: #ef4444; color: #fff; font-size: 0.9rem; padding: 0.55rem 0.9rem; cursor: pointer; }
+        .btn-logout:hover { background: #dc2626; }
+        .kiosk-header h1 { margin: 0 0 0.5rem; color: #1f2937; }
+        .kiosk-meta { color: #4b5563; margin-bottom: 1.5rem; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+        .kiosk-status { margin-bottom: 1rem; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.8rem; border-radius: 999px; font-size: 0.9rem; font-weight: 600; }
+        .kiosk-status.ok { background: #dcfce7; color: #166534; }
+        .kiosk-status.blocked { background: #fef2f2; color: #b91c1c; }
+        .kiosk-status.neutral { background: #e5e7eb; color: #374151; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; margin-bottom: 0.4rem; font-weight: 600; }
+        .form-group input, .form-group select { width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; }
+        .student-preview { font-size: 0.95rem; color: #374151; margin-top: 0.4rem; min-height: 1.3rem; }
+        .btn-submit { width: 100%; border: none; border-radius: 8px; background: #2563eb; color: #fff; font-size: 1rem; padding: 0.9rem; cursor: pointer; }
+        .btn-submit:disabled { background: #93c5fd; cursor: not-allowed; }
+        .feedback { margin-top: 1rem; padding: 0.8rem; border-radius: 8px; display: none; }
+        .feedback.success { background: #dcfce7; color: #166534; display: block; }
+        .feedback.error { background: #fef2f2; color: #b91c1c; display: block; }
+    </style>
+</head>
+<body>
+    <main class="kiosk-container">
+        <div class="kiosk-topbar">
+            <button id="logoutBtn" class="btn-logout" type="button">Déconnexion</button>
+        </div>
+        <header class="kiosk-header">
+            <h1>Inscription CDI</h1>
+            <div id="kioskStatus" class="kiosk-status neutral">Vérification de la borne...</div>
+            <div class="kiosk-meta">
+                <span>Date: <strong id="currentDate">-</strong></span>
+                <span>Créneau: <strong id="currentSlot">-</strong></span>
+            </div>
+        </header>
+
+        <form id="kioskForm">
+            <div class="form-group">
+                <label for="studentSearch">Rechercher votre nom</label>
+                <input type="text" id="studentSearch" list="studentsSuggestions" autocomplete="off" placeholder="Tapez les premières lettres de votre nom" required>
+                <datalist id="studentsSuggestions"></datalist>
+                <div class="student-preview" id="studentPreview"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="activitySelect">Activité</label>
+                <select id="activitySelect" required>
+                    <option value="">Sélectionner une activité...</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn-submit" id="submitBtn">S'inscrire au CDI</button>
+        </form>
+
+        <div id="feedback" class="feedback"></div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/cdi-kiosk.js"></script>
+</body>
+</html>

@@ -267,12 +267,22 @@ class DatabaseManager {
                 eleveId INTEGER NOT NULL,
                 statut TEXT NOT NULL DEFAULT 'NON_APPELE',
                 notes TEXT,
+                activiteCdiId INTEGER,
                 modifiePar INTEGER NOT NULL,
                 modifieLe DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (feuilleAppelId) REFERENCES feuilles_appel(id) ON DELETE CASCADE,
                 FOREIGN KEY (eleveId) REFERENCES eleves(id),
+                FOREIGN KEY (activiteCdiId) REFERENCES activites_cdi(id),
                 FOREIGN KEY (modifiePar) REFERENCES utilisateurs(id),
                 UNIQUE(feuilleAppelId, eleveId)
+            );
+
+            -- Table des activités CDI
+            CREATE TABLE IF NOT EXISTS activites_cdi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                libelle TEXT UNIQUE NOT NULL,
+                actif INTEGER DEFAULT 1,
+                creeLe DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
             -- Table de l'établissement
@@ -307,6 +317,8 @@ class DatabaseManager {
 
     async insertDefaultData() {
         try {
+            await this.ensureCdiSchema();
+
             // Insérer un utilisateur admin par défaut
             const adminPassword = require('bcrypt').hashSync('admin123', 10);
             
@@ -329,9 +341,48 @@ class DatabaseManager {
                 ('Groupe A'), ('Groupe B'), ('Option Maths'), ('Option Physique')
             `);
 
+            await this.executeQuery(`
+                INSERT OR IGNORE INTO activites_cdi (libelle, actif) VALUES
+                ('Recherche', 1),
+                ('Lecture', 1),
+                ('Travail de groupe', 1),
+                ('Dessin', 1),
+                ('Devoir informatique', 1)
+            `);
+
+            await this.executeQuery(`
+                INSERT OR IGNORE INTO config (cle, valeur, description) VALUES
+                ('cdi_kiosk_ip_restriction_enabled', 'false', 'Activer la restriction IP des bornes CDI'),
+                ('cdi_kiosk_allowed_ips', '["127.0.0.1"]', 'Liste des IPs autorisées pour les bornes CDI (JSON array)')
+            `);
+
             console.log('✅ Données par défaut vérifiées');
         } catch (error) {
             console.error('Erreur insertion données par défaut:', error);
+        }
+    }
+
+    async ensureCdiSchema() {
+        try {
+            await this.executeQuery(`
+                CREATE TABLE IF NOT EXISTS activites_cdi (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    libelle TEXT UNIQUE NOT NULL,
+                    actif INTEGER DEFAULT 1,
+                    creeLe DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            const presenceColumns = await this.executeQuery(`SELECT name FROM pragma_table_info('presences')`);
+            const hasActiviteColumn = presenceColumns.some(column => column.name === 'activiteCdiId');
+
+            if (!hasActiviteColumn) {
+                await this.executeQuery(`
+                    ALTER TABLE presences ADD COLUMN activiteCdiId INTEGER
+                `);
+            }
+        } catch (error) {
+            console.error('Erreur migration schéma CDI:', error);
         }
     }
 

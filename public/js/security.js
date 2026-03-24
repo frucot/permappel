@@ -5,6 +5,11 @@ let securityConfig = {
     allowedRanges: []
 };
 
+let cdiKioskSecurityConfig = {
+    enabled: false,
+    allowedIPs: ['127.0.0.1']
+};
+
 // URL de base de l'API (exposée par config.js)
 const API_BASE_URL = (window.CONFIG && window.CONFIG.API_BASE_URL) 
     ? window.CONFIG.API_BASE_URL 
@@ -26,6 +31,8 @@ async function loadSecurityConfig() {
         console.error('Erreur chargement configuration sécurité:', error);
         showNotification('Erreur lors du chargement de la configuration', 'error');
     }
+
+    await loadCdiKioskSecurityConfig();
 }
 
 // Mettre à jour l'interface utilisateur
@@ -242,6 +249,210 @@ async function saveSecurityConfig() {
     } catch (error) {
         console.error('Erreur sauvegarde configuration sécurité:', error);
         showNotification('Erreur lors de la sauvegarde de la configuration', 'error');
+    }
+}
+
+// ===== CONFIGURATION IP BORNES CDI =====
+async function loadCdiKioskSecurityConfig() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/admin/cdi-kiosk-security`);
+        const data = await response.json();
+
+        if (data.success) {
+            cdiKioskSecurityConfig = data.config;
+            updateCdiKioskSecurityUI();
+        } else {
+            showNotification('Erreur lors du chargement de la configuration des bornes CDI', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur chargement configuration bornes CDI:', error);
+        showNotification('Erreur lors du chargement des bornes CDI', 'error');
+    }
+}
+
+function updateCdiKioskSecurityUI() {
+    const enabledCheckbox = document.getElementById('cdiKioskRestrictionEnabled');
+    const configPanel = document.getElementById('cdiKioskConfigPanel');
+
+    if (enabledCheckbox) {
+        enabledCheckbox.checked = cdiKioskSecurityConfig.enabled;
+    }
+    if (configPanel) {
+        configPanel.style.display = cdiKioskSecurityConfig.enabled ? 'block' : 'none';
+    }
+
+    renderCdiKioskIPs();
+    loadCdiKioskCurrentStatus();
+}
+
+function toggleCdiKioskRestriction() {
+    const enabledCheckbox = document.getElementById('cdiKioskRestrictionEnabled');
+    const configPanel = document.getElementById('cdiKioskConfigPanel');
+    if (enabledCheckbox && configPanel) {
+        configPanel.style.display = enabledCheckbox.checked ? 'block' : 'none';
+    }
+}
+
+function renderCdiKioskIPs() {
+    const container = document.getElementById('cdiKioskIPsList');
+    if (!container) return;
+
+    container.innerHTML = '';
+    const ips = cdiKioskSecurityConfig.allowedIPs || [];
+    if (ips.length === 0) {
+        container.innerHTML = '<p class="empty-state">Aucune IP de borne CDI</p>';
+        return;
+    }
+
+    ips.forEach((ip, index) => {
+        const item = document.createElement('div');
+        item.className = 'ip-item';
+        item.innerHTML = `
+            <span class="ip-value">${ip}</span>
+            <button class="btn btn-sm btn-error" onclick="removeCdiKioskIP(${index})" title="Supprimer">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function addCdiKioskIP() {
+    const input = document.getElementById('newCdiKioskIPInput');
+    if (!input) return;
+
+    const ip = input.value.trim();
+    if (!ip) {
+        showNotification('Veuillez saisir une adresse IP', 'warning');
+        return;
+    }
+
+    const ipPattern = /^((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.|$)){4}$|^::1$|^::ffff:((25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.|$)){4}$/;
+    if (!ipPattern.test(ip)) {
+        showNotification('Format d’adresse IP invalide', 'error');
+        return;
+    }
+
+    if (cdiKioskSecurityConfig.allowedIPs.includes(ip)) {
+        showNotification('Cette IP de borne est déjà présente', 'warning');
+        return;
+    }
+
+    cdiKioskSecurityConfig.allowedIPs.push(ip);
+    input.value = '';
+    renderCdiKioskIPs();
+}
+
+function removeCdiKioskIP(index) {
+    if (index >= 0 && index < cdiKioskSecurityConfig.allowedIPs.length) {
+        cdiKioskSecurityConfig.allowedIPs.splice(index, 1);
+        renderCdiKioskIPs();
+    }
+}
+
+async function saveCdiKioskSecurityConfig() {
+    try {
+        const token = localStorage.getItem('token');
+        if (!token || !token.trim()) {
+            showNotification('Session invalide. Veuillez vous reconnecter.', 'error');
+            return;
+        }
+
+        const enabledCheckbox = document.getElementById('cdiKioskRestrictionEnabled');
+        const payload = {
+            enabled: enabledCheckbox ? enabledCheckbox.checked : false,
+            allowedIPs: cdiKioskSecurityConfig.allowedIPs
+        };
+
+        const response = await fetch(`${API_BASE_URL}/api/admin/cdi-kiosk-security`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('Configuration des bornes CDI sauvegardée', 'success');
+            await loadCdiKioskSecurityConfig();
+            await loadCdiKioskCurrentStatus();
+        } else {
+            showNotification(data.message || 'Erreur lors de la sauvegarde des bornes CDI', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur sauvegarde bornes CDI:', error);
+        showNotification('Erreur lors de la sauvegarde des bornes CDI', 'error');
+    }
+}
+
+async function loadCdiKioskCurrentStatus() {
+    const statusEl = document.getElementById('cdiKioskCurrentStatus');
+    if (!statusEl) return;
+
+    const applyStatusStyle = (kind) => {
+        if (kind === 'ok') {
+            statusEl.style.backgroundColor = '#dcfce7';
+            statusEl.style.color = '#166534';
+            statusEl.style.border = '1px solid #86efac';
+            return;
+        }
+        if (kind === 'blocked') {
+            statusEl.style.backgroundColor = '#fef2f2';
+            statusEl.style.color = '#b91c1c';
+            statusEl.style.border = '1px solid #fecaca';
+            return;
+        }
+        statusEl.style.backgroundColor = '#f3f4f6';
+        statusEl.style.color = '#374151';
+        statusEl.style.border = '1px solid #d1d5db';
+    };
+
+    statusEl.textContent = 'Vérification en cours...';
+    applyStatusStyle('neutral');
+
+    try {
+        const token = localStorage.getItem('token');
+        if (!token || !token.trim()) {
+            statusEl.textContent = 'Connectez-vous pour afficher le statut IP de ce poste';
+            applyStatusStyle('neutral');
+            return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/admin/cdi-kiosk-self-status`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await response.json();
+
+        if (response.status === 401 || response.status === 403) {
+            statusEl.textContent = data.message || 'Accès au statut IP refusé';
+            applyStatusStyle('neutral');
+            return;
+        }
+
+        if (!data.success) {
+            statusEl.textContent = 'Statut indisponible';
+            applyStatusStyle('neutral');
+            return;
+        }
+
+        if (!data.restrictionEnabled) {
+            statusEl.textContent = `Restriction désactivée - IP détectée: ${data.clientIP}`;
+            applyStatusStyle('neutral');
+            return;
+        }
+
+        if (data.authorized) {
+            statusEl.textContent = `Borne autorisée - IP: ${data.clientIP}`;
+            applyStatusStyle('ok');
+        } else {
+            statusEl.textContent = `Borne non autorisée - IP: ${data.clientIP}`;
+            applyStatusStyle('blocked');
+        }
+    } catch (error) {
+        statusEl.textContent = 'Statut indisponible';
+        applyStatusStyle('neutral');
     }
 }
 
