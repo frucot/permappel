@@ -586,7 +586,7 @@ Une **deuxième option**, décrite dans le guide administrateur ([Bornes CDI](#6
 
 ## 🤝 Contribution
 
-Voir le guide détaillé [CONTRIBUTING.md](CONTRIBUTING.md) (environnement local, base de données, conventions). En résumé :
+Voir le guide détaillé [CONTRIBUTING.md](CONTRIBUTING.md) (environnement local, base de données, conventions) et, pour l’architecture technique, [DEVELOPERS.md](DEVELOPERS.md). En résumé :
 
 1. **Fork** le projet
 2. **Créer une branche** pour votre fonctionnalité (`git checkout -b feature/nouvelle-fonctionnalite`)

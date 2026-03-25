@@ -618,17 +618,7 @@ async function updateStudentStatus(studentId, status) {
         if (response.ok) {
             updateStudentStatusLocal(studentId, status);
             updateAttendanceStats(currentAttendance);
-            
-            if (isConnected) {
-                socket.emit('update-student-status', {
-                    attendanceId: currentAttendance.id,
-                    studentId: studentId,
-                    status: status,
-                    userId: currentUser.id,
-                    userName: `${currentUser.prenom} ${currentUser.nom}`
-                });
-            }
-            
+
             setTimeout(() => {
                 refreshAttendanceData();
             }, 1000);

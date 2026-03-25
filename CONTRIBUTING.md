@@ -2,6 +2,8 @@
 
 Merci de contribuer au projet. Ce document complète le [README.md](README.md) (usage fonctionnel) et le [DEPLOYMENT.md](DEPLOYMENT.md) (mise en production et chemins de données).
 
+Pour une vue d’ensemble **architecture, routes, Socket.IO, base de données et pièges courants**, voir le [DEVELOPERS.md](DEVELOPERS.md).
+
 ## Environnement de développement local
 
 1. **Cloner** le dépôt et installer les dépendances à la racine : `npm install` (installe aussi les dépendances du dossier `server/` via `postinstall`).

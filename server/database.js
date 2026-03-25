@@ -159,22 +159,18 @@ class DatabaseManager {
                 } catch (error) {
                     console.warn('⚠️ Impossible de vérifier/corriger les permissions de la base de données:', error.message);
                 }
-                
-                this.setupDatabase();
-            }
-        });
 
-        // Configuration pour éviter les conflits
-        this.db.serialize(() => {
-            // Activer WAL mode pour de meilleures performances concurrentes
-            this.db.run("PRAGMA journal_mode = WAL");
-            // Augmenter le timeout pour éviter les locks
-            this.db.run("PRAGMA busy_timeout = 30000");
-            // Activer les foreign keys
-            this.db.run("PRAGMA foreign_keys = ON");
-            // Optimiser les performances
-            this.db.run("PRAGMA synchronous = NORMAL");
-            this.db.run("PRAGMA cache_size = 10000");
+                // PRAGMA puis création des tables dans une seule file d’attente : foreign_keys doit être ON
+                // avant CREATE TABLE pour que SQLite valide les REFERENCES (ordre des tables respecté dans setupDatabase).
+                this.db.serialize(() => {
+                    this.db.run('PRAGMA journal_mode = WAL');
+                    this.db.run('PRAGMA busy_timeout = 30000');
+                    this.db.run('PRAGMA foreign_keys = ON');
+                    this.db.run('PRAGMA synchronous = NORMAL');
+                    this.db.run('PRAGMA cache_size = 10000');
+                    this.setupDatabase();
+                });
+            }
         });
     }
 
@@ -260,6 +256,14 @@ class DatabaseManager {
                 UNIQUE(date, creneauId)
             );
 
+            -- Activités CDI avant presences (FK activiteCdiId -> activites_cdi)
+            CREATE TABLE IF NOT EXISTS activites_cdi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                libelle TEXT UNIQUE NOT NULL,
+                actif INTEGER DEFAULT 1,
+                creeLe DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Table des présences individuelles
             CREATE TABLE IF NOT EXISTS presences (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -275,14 +279,6 @@ class DatabaseManager {
                 FOREIGN KEY (activiteCdiId) REFERENCES activites_cdi(id),
                 FOREIGN KEY (modifiePar) REFERENCES utilisateurs(id),
                 UNIQUE(feuilleAppelId, eleveId)
-            );
-
-            -- Table des activités CDI
-            CREATE TABLE IF NOT EXISTS activites_cdi (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                libelle TEXT UNIQUE NOT NULL,
-                actif INTEGER DEFAULT 1,
-                creeLe DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
             -- Table de l'établissement

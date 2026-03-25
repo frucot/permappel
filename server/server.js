@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const DatabaseManager = require('./database');
+const { updatePresenceStatus, buildStudentStatusSocketPayload } = require('./helpers/updatePresenceStatus');
 
 class PermappelServer {
     constructor() {
@@ -474,37 +475,42 @@ class PermappelServer {
                 this.broadcastAttendanceUsers(attendanceId);
             });
 
-            // Synchronisation des changements d'appel
+            // Synchronisation des changements d'appel (même logique SQL que PUT /api/attendance/.../student/...)
             socket.on('attendance-change', async (data) => {
                 if (!socket.userId) return;
-                
+
                 try {
-                    const { attendanceId, studentId, status, notes } = data;
-                    
-                    // Mettre à jour en base avec gestion des conflits
-                    const result = await this.updateAttendanceStatus(
-                        attendanceId, studentId, status, notes, socket.userId
-                    );
-                    
-                    if (result.success) {
-                        // Diffuser le changement à tous les utilisateurs de cet appel
-                        this.io.to(`attendance-${attendanceId}`).emit('attendance-updated', {
-                            studentId,
-                            status,
-                            notes,
-                            modifiedBy: socket.userId,
-                            modifiedAt: new Date(),
-                            version: result.version
-                        });
+                    const { attendanceId, studentId, status, notes, activityId } = data || {};
+                    const result = await updatePresenceStatus(this.db, {
+                        attendanceId,
+                        studentId,
+                        status,
+                        notes,
+                        activityId,
+                        userId: socket.userId
+                    });
+
+                    if (result.ok) {
+                        this.io
+                            .to(`attendance-${attendanceId}`)
+                            .emit(
+                                'student-status-updated',
+                                buildStudentStatusSocketPayload(
+                                    attendanceId,
+                                    result.studentId,
+                                    status,
+                                    notes
+                                )
+                            );
                     } else {
-                        socket.emit('attendance-error', { 
-                            message: 'Conflit détecté, veuillez recharger' 
+                        socket.emit('attendance-error', {
+                            message: result.message || 'Mise à jour impossible'
                         });
                     }
                 } catch (error) {
                     console.error('Erreur mise à jour appel:', error);
-                    socket.emit('attendance-error', { 
-                        message: 'Erreur lors de la mise à jour' 
+                    socket.emit('attendance-error', {
+                        message: "Erreur lors de la mise à jour"
                     });
                 }
             });
@@ -555,22 +561,6 @@ class PermappelServer {
         } catch (error) {
             console.error('Erreur authentification:', error);
             return null;
-        }
-    }
-
-    async updateAttendanceStatus(attendanceId, studentId, status, notes, userId) {
-        try {
-            // Utiliser une transaction pour éviter les conflits
-            const result = await this.db.executeWithRetry(`
-                UPDATE appels 
-                SET statut = ?, notes = ?, modifiePar = ?, modifieLe = CURRENT_TIMESTAMP, version = version + 1
-                WHERE id = ? AND eleveId = ?
-            `, [status, notes, userId, attendanceId, studentId]);
-
-            return { success: true, version: result.changes };
-        } catch (error) {
-            console.error('Erreur mise à jour statut:', error);
-            return { success: false, error: error.message };
         }
     }
 

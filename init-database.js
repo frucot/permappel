@@ -177,40 +177,6 @@ function insertDefaultData() {
     console.log('📝 Insertion des données par défaut...');
 
     const adminPassword = bcrypt.hashSync('admin123', 10);
-    db.run(
-        `
-        INSERT OR IGNORE INTO utilisateurs (nomUtilisateur, nom, prenom, email, motDePasse, role)
-        VALUES ('admin', 'Administrateur', 'Admin', 'admin@etablissement.fr', ?, 'admin')
-        `,
-        [adminPassword]
-    );
-
-    db.run(`
-        UPDATE utilisateurs
-        SET role = 'admin'
-        WHERE nomUtilisateur = 'admin' AND role = 'Administrateur'
-    `);
-
-    db.run(`
-        INSERT OR IGNORE INTO groupes (nom) VALUES
-        ('Groupe A'), ('Groupe B'), ('Option Maths'), ('Option Physique')
-    `);
-
-    db.run(`
-        INSERT OR IGNORE INTO activites_cdi (libelle, actif) VALUES
-        ('Recherche', 1),
-        ('Lecture', 1),
-        ('Travail de groupe', 1),
-        ('Dessin', 1),
-        ('Devoir informatique', 1)
-    `);
-
-    db.run(`
-        INSERT OR IGNORE INTO config (cle, valeur, description) VALUES
-        ('cdi_kiosk_ip_restriction_enabled', 'false', 'Activer la restriction IP des bornes CDI'),
-        ('cdi_kiosk_allowed_ips', '["127.0.0.1"]', 'Liste des IPs autorisées pour les bornes CDI (JSON array)')
-    `);
-
     const defaultSchedules = [
         { nom: 'M1', heureDebut: '08:00', heureFin: '09:00', description: 'Première heure du matin' },
         { nom: 'M2', heureDebut: '09:00', heureFin: '10:00', description: 'Deuxième heure du matin' },
@@ -222,28 +188,94 @@ function insertDefaultData() {
         { nom: 'S4', heureDebut: '16:00', heureFin: '17:00', description: "Quatrième heure de l'après-midi" }
     ];
 
-    const stmt = db.prepare(
-        'INSERT OR IGNORE INTO creneaux (nom, heureDebut, heureFin, description) VALUES (?, ?, ?, ?)'
-    );
-    defaultSchedules.forEach((s) => {
-        stmt.run(s.nom, s.heureDebut, s.heureFin, s.description);
-    });
-    stmt.finalize();
+    // File unique : tous les INSERT se terminent avant db.close() (évite prepare/finalize + close en course).
+    db.serialize(() => {
+        db.run(
+            `
+            INSERT OR IGNORE INTO utilisateurs (nomUtilisateur, nom, prenom, email, motDePasse, role)
+            VALUES ('admin', 'Administrateur', 'Admin', 'admin@etablissement.fr', ?, 'admin')
+            `,
+            [adminPassword],
+            (err) => {
+                if (err) {
+                    console.error('❌ Insert admin:', err.message);
+                    process.exitCode = 1;
+                }
+            }
+        );
 
-    db.close((closeErr) => {
-        if (closeErr) {
-            console.error('❌ Erreur lors de la fermeture de la base de données:', closeErr);
-            process.exitCode = 1;
-            return;
+        db.run(
+            `
+            INSERT OR IGNORE INTO groupes (nom) VALUES
+            ('Groupe A'), ('Groupe B'), ('Option Maths'), ('Option Physique')
+            `,
+            (err) => {
+                if (err) {
+                    console.error('❌ Insert groupes:', err.message);
+                    process.exitCode = 1;
+                }
+            }
+        );
+
+        db.run(
+            `
+            INSERT OR IGNORE INTO activites_cdi (libelle, actif) VALUES
+            ('Recherche', 1),
+            ('Lecture', 1),
+            ('Travail de groupe', 1),
+            ('Dessin', 1),
+            ('Devoir informatique', 1)
+            `,
+            (err) => {
+                if (err) {
+                    console.error('❌ Insert activites_cdi:', err.message);
+                    process.exitCode = 1;
+                }
+            }
+        );
+
+        db.run(
+            `
+            INSERT OR IGNORE INTO config (cle, valeur, description) VALUES
+            ('cdi_kiosk_ip_restriction_enabled', 'false', 'Activer la restriction IP des bornes CDI'),
+            ('cdi_kiosk_allowed_ips', '["127.0.0.1"]', 'Liste des IPs autorisées pour les bornes CDI (JSON array)')
+            `,
+            (err) => {
+                if (err) {
+                    console.error('❌ Insert config CDI:', err.message);
+                    process.exitCode = 1;
+                }
+            }
+        );
+
+        for (const s of defaultSchedules) {
+            db.run(
+                'INSERT OR IGNORE INTO creneaux (nom, heureDebut, heureFin, description) VALUES (?, ?, ?, ?)',
+                [s.nom, s.heureDebut, s.heureFin, s.description],
+                (err) => {
+                    if (err) {
+                        console.error('❌ Insert creneau:', s.nom, err.message);
+                        process.exitCode = 1;
+                    }
+                }
+            );
         }
-        console.log('✅ Données par défaut insérées avec succès');
-        console.log('🔑 Compte administrateur créé:');
-        console.log('   - Nom d\'utilisateur: admin');
-        console.log('   - Mot de passe: admin123');
-        console.log('   - Email: admin@etablissement.fr');
-        console.log('');
-        console.log('⚠️  IMPORTANT: Changez le mot de passe administrateur après la première connexion !');
-        console.log('✅ Base de données initialisée avec succès !');
-        console.log('📁 Base de données créée:', DB_PATH);
+
+        db.close((closeErr) => {
+            if (closeErr) {
+                console.error('❌ Erreur lors de la fermeture de la base de données:', closeErr);
+                process.exitCode = 1;
+                return;
+            }
+            console.log('✅ Données par défaut insérées avec succès');
+            console.log('🔑 Compte administrateur créé:');
+            console.log('   - Nom d\'utilisateur: admin');
+            console.log('   - Mot de passe: admin123');
+            console.log('   - Email: admin@etablissement.fr');
+            console.log('');
+            console.log('⚠️  IMPORTANT: Changez le mot de passe administrateur après la première connexion !');
+            console.log('✅ Base de données initialisée avec succès !');
+            console.log('📁 Base de données créée:', DB_PATH);
+        });
     });
 }

@@ -1,5 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const {
+    parseBearerUserId,
+    updatePresenceStatus,
+    buildStudentStatusSocketPayload
+} = require('../helpers/updatePresenceStatus');
 
 module.exports = (db, io) => {
     // GET /api/attendance - Récupérer toutes les feuilles d'appel
@@ -337,39 +342,41 @@ module.exports = (db, io) => {
         try {
             const { attendanceId, studentId } = req.params;
             const { status, notes, activityId } = req.body;
-            const [date, creneauId] = attendanceId.split('_');
-            
-            // Récupérer la feuille d'appel
-            const feuille = await db.executeQuery(
-                'SELECT id FROM feuilles_appel WHERE date = ? AND creneauId = ?',
-                [date, creneauId]
-            );
-            
-            if (feuille.length === 0) {
-                return res.status(404).json({ success: false, message: 'Feuille d\'appel non trouvée' });
+            const userId = parseBearerUserId(req);
+            if (userId == null) {
+                return res.status(401).json({ success: false, message: 'Authentification requise' });
             }
-            
-            // Mettre à jour la présence
-            await db.executeQuery(`
-                UPDATE presences 
-                SET statut = ?,
-                    notes = ?,
-                    activiteCdiId = ?,
-                    modifieLe = CURRENT_TIMESTAMP,
-                    modifiePar = ?
-                WHERE feuilleAppelId = ? AND eleveId = ?
-            `, [status, notes, activityId || null, 1, feuille[0].id, studentId]);
-            
-            // Émettre la mise à jour via Socket.IO
+
+            const result = await updatePresenceStatus(db, {
+                attendanceId,
+                studentId,
+                status,
+                notes,
+                activityId,
+                userId
+            });
+
+            if (!result.ok) {
+                const statusByCode = {
+                    FEUILLE_NOT_FOUND: 404,
+                    NO_ROW_UPDATED: 400,
+                    INVALID_ATTENDANCE_ID: 400,
+                    INVALID_STUDENT: 400,
+                    INVALID_STATUS: 400,
+                    INVALID_USER: 401,
+                    DB_ERROR: 500
+                };
+                const httpStatus = statusByCode[result.code] || 400;
+                return res.status(httpStatus).json({ success: false, message: result.message });
+            }
+
             if (io) {
-                io.to(`attendance-${attendanceId}`).emit('student-status-updated', {
-                    studentId: parseInt(studentId),
-                    status: status,
-                    notes: notes,
-                    timestamp: new Date().toISOString()
-                });
+                io.to(`attendance-${attendanceId}`).emit(
+                    'student-status-updated',
+                    buildStudentStatusSocketPayload(attendanceId, result.studentId, status, notes)
+                );
             }
-            
+
             res.json({ success: true, message: 'Statut mis à jour' });
         } catch (error) {
             console.error('Erreur mise à jour statut:', error);
