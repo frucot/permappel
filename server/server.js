@@ -6,6 +6,8 @@ const fs = require('fs');
 const os = require('os');
 const DatabaseManager = require('./database');
 const { updatePresenceStatus, buildStudentStatusSocketPayload } = require('./helpers/updatePresenceStatus');
+const { verifyToken, setJwtSecret } = require('./lib/jwtAuth');
+const { getJwtSecret } = require('./lib/jwtSecretProvider');
 
 class PermappelServer {
     constructor() {
@@ -13,7 +15,12 @@ class PermappelServer {
         this.server = http.createServer(this.app);
         this.io = socketIo(this.server, {
             cors: {
-                origin: "*",
+                origin: (origin, callback) => {
+                    if (this.isOriginAllowed(origin)) {
+                        return callback(null, true);
+                    }
+                    return callback(new Error('Origine Socket.IO non autorisée'));
+                },
                 methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
                 allowedHeaders: ["Origin", "X-Requested-With", "Content-Type", "Accept", "Authorization"],
                 credentials: true
@@ -41,11 +48,15 @@ class PermappelServer {
         this.setupAutoBackup();
     }
 
+    isOriginAllowed(origin) {
+        if (!origin) return true;
+        if (origin === 'http://localhost:3001' || origin === 'http://127.0.0.1:3001') return true;
+        if (/^http:\/\/10\.\d{1,3}\.\d{1,3}\.\d{1,3}:3001$/i.test(origin)) return true;
+        if (/^http:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}:3001$/i.test(origin)) return true;
+        return /^http:\/\/192\.168\.\d{1,3}\.\d{1,3}:3001$/i.test(origin);
+    }
+
     setupMiddleware() {
-        // Configurer Express pour extraire correctement l'IP client
-        // Important pour les connexions réseau local
-        this.app.set('trust proxy', true);
-        
         // Middleware de restriction par IP (appliqué en premier)
         // La configuration est chargée depuis la base de données
         this.app.use(async (req, res, next) => {
@@ -56,12 +67,7 @@ class PermappelServer {
             }
             
             // Récupérer l'IP source de la requête (plusieurs méthodes pour compatibilité)
-            let clientIP = req.ip || 
-                          req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                          req.connection?.remoteAddress || 
-                          req.socket?.remoteAddress ||
-                          (req.socket && req.socket.remoteAddress) ||
-                          'unknown';
+            let clientIP = req.socket?.remoteAddress || req.connection?.remoteAddress || 'unknown';
             
             // Nettoyer l'IP (enlever le préfixe ::ffff: si présent pour IPv4 mapped IPv6)
             // et extraire seulement l'IP si c'est au format "::ffff:IP"
@@ -81,7 +87,7 @@ class PermappelServer {
             const isAllowed = this.isIPAllowed(clientIP);
             if (!isAllowed) {
                 console.warn(`🚫 Accès refusé depuis IP non autorisée: ${clientIP} - ${req.method} ${req.path}`);
-                console.warn(`   IP brute: ${req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress}`);
+                console.warn(`   IP brute: ${req.socket?.remoteAddress || req.connection?.remoteAddress}`);
                 console.warn(`   Headers X-Forwarded-For: ${req.headers['x-forwarded-for']}`);
                 console.warn(`   Configuration sécurité: enabled=${this.securityConfig.enabled}, IPs autorisées=${this.securityConfig.allowedIPs.length}, Plages=${this.securityConfig.allowedRanges.length}`);
                 return res.status(403).json({
@@ -97,9 +103,14 @@ class PermappelServer {
         // Middleware CORS personnalisé pour gérer les requêtes cross-origin
         this.app.use((req, res, next) => {
             const origin = req.headers.origin;
+
+            const isOriginAllowed = this.isOriginAllowed(origin);
             
             // Définir les headers CORS pour toutes les réponses
-            res.setHeader('Access-Control-Allow-Origin', origin || '*');
+            if (origin && isOriginAllowed) {
+                res.setHeader('Access-Control-Allow-Origin', origin);
+            }
+            res.setHeader('Vary', 'Origin');
             res.setHeader('Access-Control-Allow-Credentials', 'true');
             res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
             res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma');
@@ -109,8 +120,13 @@ class PermappelServer {
             // Gérer les requêtes OPTIONS (preflight)
             if (req.method === 'OPTIONS') {
                 console.log(`${new Date().toISOString()} - OPTIONS ${req.path} (preflight)`);
+                if (!isOriginAllowed) {
+                    return res.status(403).json({ success: false, message: 'Origine non autorisée' });
+                }
                 // S'assurer que tous les headers CORS sont présents pour les requêtes OPTIONS
-                res.setHeader('Access-Control-Allow-Origin', origin || '*');
+                if (origin) {
+                    res.setHeader('Access-Control-Allow-Origin', origin);
+                }
                 res.setHeader('Access-Control-Allow-Credentials', 'true');
                 res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
                 res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control, Pragma');
@@ -119,7 +135,7 @@ class PermappelServer {
             }
             
             // Middleware de logging
-            const clientIP = req.ip || req.connection?.remoteAddress || 'unknown';
+            const clientIP = req.socket?.remoteAddress || req.connection?.remoteAddress || 'unknown';
             console.log(`${new Date().toISOString()} - ${req.method} ${req.path} depuis ${clientIP}`);
             next();
         });
@@ -139,8 +155,8 @@ class PermappelServer {
                 // Windows : utiliser ProgramData pour un accès partagé
                 uploadsPath = path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'PERMAPPEL', 'uploads');
             } else if (process.platform === 'darwin') {
-                // macOS : utiliser /Library/Application Support
-                uploadsPath = '/Library/Application Support/PERMAPPEL/uploads';
+                // macOS : utiliser le dossier utilisateur pour éviter les droits admin
+                uploadsPath = path.join(os.homedir(), 'Library', 'Application Support', 'PERMAPPEL', 'uploads');
             } else {
                 // Linux : utiliser /opt ou /var/lib
                 uploadsPath = '/opt/PERMAPPEL/uploads';
@@ -307,9 +323,14 @@ class PermappelServer {
                     return next();
                 }
 
+                const decoded = verifyToken(token);
+                if (!decoded || !decoded.id) {
+                    return next();
+                }
+
                 const users = await this.db.executeQuery(
                     'SELECT id, role, actif FROM utilisateurs WHERE id = ?',
-                    [token]
+                    [decoded.id]
                 );
                 if (!users.length || users[0].actif !== 1) {
                     return next();
@@ -386,7 +407,6 @@ class PermappelServer {
             }
 
             const clientIP =
-                socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                 socket.handshake.address ||
                 socket.conn.remoteAddress;
 
@@ -550,12 +570,14 @@ class PermappelServer {
     }
 
     async authenticateUser(token) {
-        // Implémentation simple de vérification de token
-        // Dans un vrai projet, utiliser JWT
         try {
+            const decoded = verifyToken(token);
+            if (!decoded || !decoded.id) {
+                return null;
+            }
             const result = await this.db.executeQuery(
                 'SELECT id, nomUtilisateur, nom, prenom, email, role FROM utilisateurs WHERE id = ?',
-                [token]
+                [decoded.id]
             );
             return result[0] || null;
         } catch (error) {
@@ -628,6 +650,10 @@ class PermappelServer {
     }
 
     async start(port = 3001) {
+        const jwtSecretInfo = await getJwtSecret(this.db);
+        setJwtSecret(jwtSecretInfo.secret);
+        console.log(`🔐 JWT secret initialisé (source=${jwtSecretInfo.source})`);
+
         // Charger la configuration de sécurité avant de démarrer le serveur
         await this.loadSecurityConfig();
         

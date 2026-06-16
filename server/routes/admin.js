@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const createCdiKioskIpHelpers = require('../middleware/cdiKioskIpRestriction');
+const bcrypt = require('bcryptjs');
+const { verifyToken } = require('../lib/jwtAuth');
 
 module.exports = (db, serverInstance) => {
     const { getCdiKioskSecurityConfig, normalizeIP } = createCdiKioskIpHelpers(db);
@@ -14,9 +16,13 @@ module.exports = (db, serverInstance) => {
             if (!token) {
                 return res.status(401).json({ success: false, message: 'Authentification requise' });
             }
+            const decoded = verifyToken(token);
+            if (!decoded || !decoded.id) {
+                return res.status(401).json({ success: false, message: 'Session invalide' });
+            }
             const users = await db.executeQuery(
                 'SELECT id, role, actif FROM utilisateurs WHERE id = ?',
-                [token]
+                [decoded.id]
             );
             if (!users.length || users[0].actif !== 1) {
                 return res.status(401).json({ success: false, message: 'Session invalide' });
@@ -107,7 +113,6 @@ module.exports = (db, serverInstance) => {
                 });
             }
 
-            const bcrypt = require('bcrypt');
             const hashedPassword = await bcrypt.hash(password, 10);
 
             const result = await db.executeQuery(`
@@ -153,7 +158,6 @@ module.exports = (db, serverInstance) => {
             
             // Ajouter le mot de passe seulement s'il est fourni
             if (password && password.trim() !== '') {
-                const bcrypt = require('bcrypt');
                 const hashedPassword = await bcrypt.hash(password, 10);
                 query = query.replace('WHERE id = ?', ', motDePasse = ? WHERE id = ?');
                 params.splice(-1, 0, hashedPassword);

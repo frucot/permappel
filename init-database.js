@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 
 const sqlite3 = require('./server/node_modules/sqlite3').verbose();
-const bcrypt = require('./server/node_modules/bcrypt');
+const bcrypt = require('bcryptjs');
 
 const DB_PATH = path.join(__dirname, 'server', 'permappel.db');
 const BACKUP_DIR = path.join(__dirname, 'server', 'backups');

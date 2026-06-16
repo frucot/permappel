@@ -58,7 +58,29 @@ Le dépôt **ne fournit pas** de fichiers `production.env`, `.env` ni `config.js
 - **Base SQLite** : créée sous un répertoire partagé système (voir section Base de données), pas via `DB_PATH` dans un fichier livré avec le projet.
 - **Sauvegardes automatiques** : déclenchées côté serveur (intervalle d’une heure dans `setupAutoBackup`), fichiers dans le dossier `backups/` à côté de `permappel.db`.
 
-Si vous hébergez ou adaptez le serveur vous-même, vous pouvez introduire des variables d’environnement **dans votre propre infrastructure** ; il faudra alors les lire explicitement dans le code ou un fichier de config que vous ajoutez. Ne vous fiez pas à d’anciens exemples de doc mentionnant `JWT_SECRET` ou `config.json` : ils ne correspondent pas aux fichiers actuels du dépôt.
+### JWT secret (production)
+
+L’application gère automatiquement le secret JWT avec l’ordre de priorité suivant :
+
+1. `process.env.JWT_SECRET` (override administrateur),
+2. valeur persistée `config.jwt_secret` dans la base SQLite,
+3. génération automatique d’un secret fort (premier démarrage), puis persistance en base.
+
+Conséquences pratiques :
+
+- aucune variable machine n’est obligatoire pour un premier déploiement,
+- le secret est stable entre redémarrages car stocké dans la base utilisée par l’application,
+- changer le secret (env ou DB) invalide les sessions JWT en cours (reconnexion nécessaire),
+- les sauvegardes de base contiennent aussi le secret JWT : protéger les backups comme des secrets.
+
+### Vérifications recommandées
+
+1. **Premier démarrage sans `JWT_SECRET`** : vérifier qu'une clé `jwt_secret` apparaît en table `config`.
+2. **Redémarrage du serveur** : vérifier que les tokens émis avant redémarrage restent valides.
+3. **Override environnement** : définir `JWT_SECRET`, redémarrer, vérifier que de nouveaux tokens sont signés avec la nouvelle clé.
+4. **Régression auth HTTP** : tester `POST /api/auth/login` puis `GET /api/auth/me`.
+5. **Régression auth Socket.IO** : tester l’événement `authenticate` avec un JWT valide.
+6. **Logs** : vérifier qu’aucune valeur de secret n’apparaît dans les logs.
 
 **Windows** : `PROGRAMDATA` peut influencer les chemins (ex. `C:\ProgramData\PERMAPPEL`), comme implémenté dans `database.js`.
 
