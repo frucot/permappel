@@ -4,6 +4,11 @@
 
 PERMAPPEL est une application de gestion des appels scolaires développée avec Electron et Node.js. Elle permet de créer, gérer et suivre les feuilles d'appel en temps réel avec synchronisation multi-utilisateurs.
 
+**En bref — qui lit ce guide ?**
+- **Personnel de l’établissement (administrateur, vie scolaire, enseignants)** : connectez-vous à l’interface principale pour les appels, les élèves et l’administration. Les **AED**, **CPE** et **documentalistes** ont le même type d’accès applicatif selon les comptes créés (seul le rôle **administrateur** gère l’administration complète).
+- **Élèves** : uniquement la **borne d’inscription CDI** (page simplifiée), après connexion avec un compte au rôle « Élève ».
+- **Déploiement technique** : consultez aussi [DEPLOYMENT.md](DEPLOYMENT.md) pour les chemins de base de données et la mise en production.
+
 ## ✨ Fonctionnalités principales
 
 ### 🎯 Gestion des Appels
@@ -13,11 +18,17 @@ PERMAPPEL est une application de gestion des appels scolaires développée avec 
 - **Chat collaboratif par feuille d'appel** pour échanger entre utilisateurs connectés
 - **Synchronisation automatique** des élèves (ajout/suppression selon critères)
 - **Mode lecture seule** pour les appels passés
-- **Export PDF** des feuilles d'appel
+- **Export PDF** des feuilles d'appel (génération dans l’interface avec jsPDF)
+
+### 📚 Borne CDI (Centre de documentation et d’information)
+- **Page dédiée** `cdi-kiosk.html` : recherche d’élève, choix d’une **activité CDI**, inscription sur la feuille d’appel du créneau en cours (statut type présence CDI)
+- **Comptes « Élève »** : après connexion, accès **uniquement** à cette borne (pas au reste de l’application)
+- **Raccourci pour le personnel** : depuis la liste des appels, bouton **« Borne CDI »** pour ouvrir la page dans un nouvel onglet (utile sur un poste salle / CDI)
+- **Administration** : liste des activités CDI en base, **restriction optionnelle par adresse IP** des postes autorisés à utiliser la borne (réglage distinct de la restriction IP globale de l’application)
 
 ### 👥 Gestion des Utilisateurs
-- **Authentification** sécurisée avec JWT
-- **Gestion des rôles** (administrateur, utilisateur)
+- **Authentification** : connexion avec mot de passe ; après validation, un **jeton** (identifiant utilisateur) est stocké côté client et envoyé dans l’en-tête `Authorization` pour les requêtes protégées — ce n’est **pas** un JWT signé
+- **Gestion des rôles** : administrateur, AED, CPE, documentaliste, élève (voir le guide administrateur ci-dessous)
 - **Synchronisation multi-utilisateurs** sur la même feuille d'appel
 
 ### 🎓 Gestion des Données
@@ -38,8 +49,10 @@ PERMAPPEL est une application de gestion des appels scolaires développée avec 
 - **Base de données**: SQLite
 - **Communication temps réel**: Socket.IO
 - **Application desktop**: Electron
-- **Authentification**: JWT
-- **Export PDF**: jsPDF
+- **Authentification**: jeton basé sur l’identifiant utilisateur (header `Authorization`), mots de passe hashés avec bcrypt
+- **Export PDF**: jsPDF (navigateur / Electron ; chargement possible via CDN avec repli sur copie locale)
+
+*Note : le serveur liste parfois la dépendance `puppeteer` dans `server/package.json`, mais l’export PDF utilisateur passe par jsPDF côté client, pas par Puppeteer.*
 
 ## 📦 Installation
 
@@ -60,10 +73,13 @@ npm install
 cd ..
 ```
 
-### Initialisation de la base de données
+### Script `init-database.js` (développement uniquement)
+
+**Important :** ce script **ne crée pas** la base de données utilisée par l’application PERMAPPEL en usage normal (mode production / installeur). Au premier lancement, le serveur crée et met à jour automatiquement la base **réelle** via `server/database.js`, dans le répertoire partagé système (chemins indiqués plus bas dans *Base de données*).
+
+`init-database.js` sert uniquement au **développement** : il génère un fichier SQLite local `server/permappel.db` (pratique pour tests ou inspection SQL). Le serveur PERMAPPEL **n’utilise pas** ce chemin par défaut — il ouvre la base dans le répertoire partagé système. Vous pouvez l’exécuter avec `npm run init-db` ou :
 
 ```bash
-# Créer la base de données avec les données par défaut
 node init-database.js
 ```
 
@@ -126,7 +142,7 @@ Pour créer l'installeur Windows (.exe) de l'application :
 #### 1. Préparer la version
 ```bash
 # Mettre à jour la version dans package.json (ligne 3)
-# Exemple : "version": "1.0.2"
+# Exemple : "version": "1.0.4"
 ```
 
 #### 2. Nettoyer les anciens builds
@@ -141,13 +157,13 @@ Remove-Item -Recurse -Force dist\* -ErrorAction SilentlyContinue
 ```bash
 npm run build-installer
 ```
-Génère : `dist/PERMAPPEL Setup 1.0.2.exe`
+Génère : `dist/PERMAPPEL Setup 1.0.4.exe` (selon la version dans package.json)
 
 **Option B : Version portable uniquement**
 ```bash
 npm run build-portable
 ```
-Génère : `dist/PERMAPPEL-1.0.2-Portable.exe`
+Génère : `dist/PERMAPPEL-1.0.4-Portable.exe` (selon la version dans package.json)
 
 **Option C : Les deux versions**
 ```bash
@@ -192,9 +208,10 @@ Les fichiers générés se trouvent dans le dossier `dist/` :
 - **Modifier les utilisateurs** : Changer les informations ou les rôles
 - **Supprimer des utilisateurs** : Retirer un compte (attention : action irréversible)
 
-**Rôles disponibles :**
-- **Admin** : Accès complet à toutes les fonctionnalités
-- **Professeur** : Accès aux appels et élèves (pas d'administration)
+**Rôles disponibles** (lors de la création ou modification d’un utilisateur) :
+- **Administrateur** : accès complet, y compris administration (utilisateurs, sécurité, base de données, groupes, créneaux, etc.)
+- **AED**, **CPE**, **Documentaliste** : accès à l’interface principale (appels, élèves, etc.) **sans** le panneau d’administration réservé aux administrateurs
+- **Élève** : après connexion, redirection **automatique** vers la **borne CDI** uniquement (pas d’accès aux menus appels / élèves du personnel)
 
 #### 2. Import des élèves
 **Menu : Élèves → Import CSV**
@@ -224,6 +241,15 @@ Les fichiers générés se trouvent dans le dossier `dist/` :
 - Renseigner les informations de l'établissement (nom, adresse, etc.)
 - Ces informations apparaissent sur les exports PDF
 
+#### 6. Bornes CDI (optionnel)
+**Menu : Administration → section « Bornes CDI »** (dans la zone sécurité / administration)
+
+- **Restriction IP** : vous pouvez **désactiver** (par défaut) ou **activer** la limitation des postes pouvant utiliser l’auto-inscription CDI (recherche élève, activité, validation). Utile pour n’autoriser que les PC du CDI.
+- **Liste d’adresses IP** : ajoutez les IP des postes « borne » ; enregistrez la configuration après modification.
+- **Important** : ce réglage est **indépendant** de la restriction IP globale de l’application (section *Restriction d'accès par adresse IP* plus bas dans ce document). Les deux peuvent coexister avec des règles différentes.
+
+Créez des **comptes élèves** (rôle « Élève ») si les élèves doivent se connecter eux-mêmes sur la borne ; sinon, un compte personnel peut ouvrir la page `cdi-kiosk.html` selon votre organisation.
+
 ### Utilisation quotidienne
 
 #### Créer une feuille d'appel
@@ -251,6 +277,7 @@ Les fichiers générés se trouvent dans le dossier `dist/` :
 - **Synchroniser les élèves** : Bouton "Synchroniser les élèves" pour ajouter/supprimer automatiquement selon les critères
 - **Vérifier l'appel** : Vérifier qu'aucun élève n'a été oublié
 - **Export PDF** : Générer un PDF de la feuille d'appel
+- **Borne CDI** (personnel) : depuis l’écran de gestion des appels, bouton pour ouvrir la page d’inscription CDI dans un nouvel onglet ; les inscriptions peuvent mettre à jour la feuille ouverte en temps réel
 
 **Utiliser le chat dans une feuille d'appel :**
 1. Ouvrir la feuille d'appel concernée
@@ -345,9 +372,11 @@ PERMAPPEL_BUILD_2/
 │   │   ├── app.js         # Application principale
 │   │   ├── attendance.js  # Gestion des appels
 │   │   ├── students.js    # Gestion des élèves
+│   │   ├── cdi-kiosk.js   # Borne CDI (API /cdi, /students)
 │   │   └── ...
 │   ├── styles.css         # Styles CSS
 │   ├── index.html         # Page principale
+│   ├── cdi-kiosk.html     # Borne d'inscription CDI
 │   └── attendance.html    # Page feuille d'appel
 ├── server/                # Serveur backend
 │   ├── routes/           # Routes API
@@ -357,7 +386,7 @@ PERMAPPEL_BUILD_2/
 │   │   └── ...
 │   ├── database.js       # Gestion base de données
 │   ├── server.js         # Serveur principal
-│   └── permappel.db      # Base de données SQLite
+│   └── permappel.db      # (optionnel) SQLite local si vous avez lancé init-database.js — pas la base « réelle » de l’app installée
 ├── assets/                # Ressources (icônes, etc.)
 ├── dist/                  # Fichiers compilés (après build)
 ├── main.js               # Processus principal Electron
@@ -371,12 +400,14 @@ PERMAPPEL_BUILD_2/
 
 ### Base de données
 
-La base de données SQLite est créée automatiquement au premier démarrage dans :
+La base de données SQLite **réelle** est créée automatiquement au premier démarrage du serveur (application Electron ou `cd server && npm start`) dans :
 - **Windows** : `C:\ProgramData\PERMAPPEL\permappel.db`
 - **macOS** : `/Library/Application Support/PERMAPPEL/permappel.db`
 - **Linux** : `/opt/PERMAPPEL/permappel.db`
 
-Les tables sont initialisées automatiquement avec les structures nécessaires.
+Les tables sont initialisées automatiquement avec les structures nécessaires (y compris migrations gérées dans `server/database.js`).
+
+Le script racine `init-database.js` **n’alimente pas** ce fichier : il ne concerne que `server/permappel.db` à des fins de **développement** (voir la section *Script init-database.js (développement uniquement)* plus haut).
 
 ### Sauvegarde automatique
 
@@ -414,24 +445,27 @@ La sauvegarde sera téléchargée directement sur votre ordinateur.
 
 #### Restauration
 
-Pour restaurer une sauvegarde :
+Pour restaurer une sauvegarde sur la **base réelle** utilisée par l’application :
 
-1. Arrêter l'application PERMAPPEL
-2. Remplacer le fichier `permappel.db` par le fichier de sauvegarde souhaité
-3. Renommer le fichier de sauvegarde en `permappel.db`
-4. Redémarrer l'application
+1. **Arrêter** complètement PERMAPPEL (toutes les fenêtres / instances).
+2. Ouvrir le dossier qui contient le fichier de base (exemples) :
+   - **Windows** : `C:\ProgramData\PERMAPPEL\`
+   - **macOS** : `/Library/Application Support/PERMAPPEL/`
+   - **Linux** : `/opt/PERMAPPEL/`
+3. **Renommer ou copier** l’ancien `permappel.db` par précaution (ex. `permappel.db.old`).
+4. Copier votre fichier de sauvegarde à la place de `permappel.db` (même nom exact).
+5. **Redémarrer** l'application.
 
-⚠️ **Attention** : La restauration remplace complètement la base de données actuelle. Assurez-vous d'avoir une sauvegarde récente avant de restaurer.
+⚠️ **Attention** : la restauration remplace toute la base actuelle. Ne confondez pas ce fichier avec `server/permappel.db` (fichier local optionnel créé uniquement par `init-database.js` en développement).
 
 ## 🔒 Sécurité
 
 ### Mesures de sécurité générales
 
-- **Authentification JWT** pour toutes les requêtes
+- **Authentification** : les routes sensibles de l’API attendent un jeton (identifiant utilisateur) dans l’en-tête `Authorization` après connexion
 - **Validation des données** côté serveur
 - **Protection CORS** configurée
-- **Chiffrement** des mots de passe avec bcrypt
-- **Sessions** avec timeout automatique
+- **Hachage** des mots de passe avec bcrypt
 
 ### 🔐 Restriction d'accès par adresse IP
 
@@ -529,6 +563,10 @@ Les tentatives d'accès refusées sont enregistrées dans les logs du serveur :
 
 Ces logs permettent d'identifier les tentatives d'accès non autorisées.
 
+### Bornes CDI et adresse IP (séparé de la restriction ci-dessus)
+
+Une **deuxième option**, décrite dans le guide administrateur ([Bornes CDI](#6-bornes-cdi-optionnel)), limite **uniquement** les fonctionnalités de la **page borne CDI** (auto-inscription avec activité). Elle utilise ses propres clés dans la table `config` et une liste d’IP dédiée. Vous pouvez ainsi laisser l’application accessible au réseau de l’établissement tout en réservant la borne à quelques postes fixes.
+
 ## 🐛 Dépannage
 
 ### Problème de connexion
@@ -548,6 +586,8 @@ Ces logs permettent d'identifier les tentatives d'accès non autorisées.
 
 ## 🤝 Contribution
 
+Voir le guide détaillé [CONTRIBUTING.md](CONTRIBUTING.md) (environnement local, base de données, conventions) et, pour l’architecture technique, [DEVELOPERS.md](DEVELOPERS.md). En résumé :
+
 1. **Fork** le projet
 2. **Créer une branche** pour votre fonctionnalité (`git checkout -b feature/nouvelle-fonctionnalite`)
 3. **Commit** vos changements (`git commit -am 'Ajout nouvelle fonctionnalité'`)
@@ -564,5 +604,5 @@ Pour signaler un bug ou demander une fonctionnalité, utilisez les [Issues GitHu
 
 ---
 
-**Version actuelle** : 1.0.3  
-**Dernière mise à jour** : 2025
+**Version actuelle** : voir le champ `version` dans [package.json](package.json) (ex. 1.0.4).  
+**Dernière mise à jour de cette documentation** : 2026

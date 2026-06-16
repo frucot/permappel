@@ -1,96 +1,77 @@
-# Guide de Contribution - PERMAPPEL
+# Guide de contribution — PERMAPPEL
 
-## 🚀 Comment contribuer
+Merci de contribuer au projet. Ce document complète le [README.md](README.md) (usage fonctionnel) et le [DEPLOYMENT.md](DEPLOYMENT.md) (mise en production et chemins de données).
 
-### 📋 Avant de commencer
+Pour une vue d’ensemble **architecture, routes, Socket.IO, base de données et pièges courants**, voir le [DEVELOPERS.md](DEVELOPERS.md).
 
-1. **Fork** le projet sur GitHub
-2. **Clone** votre fork localement
-3. **Installer** les dépendances : `npm install`
-4. **Créer une branche** pour votre fonctionnalité
+## Environnement de développement local
 
-### 🔧 Processus de développement
+1. **Cloner** le dépôt et installer les dépendances à la racine : `npm install` (installe aussi les dépendances du dossier `server/` via `postinstall`).
+2. **Deux terminaux** sont en pratique nécessaires :
+   - Terminal 1 : `cd server && npm start` — démarre l’API Express (port **3001** par défaut).
+   - Terminal 2 : à la racine du dépôt, `npm run dev` — lance Electron en mode développement avec les DevTools.
+3. **Base de données** : au premier lancement du serveur, la base SQLite **réelle** est créée dans le répertoire partagé système (voir README / DEPLOYMENT), pas dans `server/permappel.db`. Le script racine `init-database.js` (`npm run init-db`) ne sert qu’à générer un fichier **local** `server/permappel.db` pour tests ou inspection SQL ; alignez-le sur le schéma si vous modifiez les tables.
 
-#### 1. Créer une branche
-```bash
-git checkout -b feature/nom-de-votre-fonctionnalite
-```
+## Schéma SQL et migrations
 
-#### 2. Développer
-- Respecter les conventions de code existantes
-- Ajouter des commentaires pour les fonctions complexes
-- Tester vos modifications
+- **Source de vérité** : [server/database.js](server/database.js) (`setupDatabase`, `insertDefaultData`, `ensureCdiSchema`, etc.). Toute nouvelle table ou colonne doit y être reflétée pour les bases existantes et neuves.
+- Si vous maintenez [init-database.js](init-database.js), gardez-le **cohérent** avec `database.js` pour éviter la dérive entre environnements.
 
-#### 3. Commit
-```bash
-git add .
-git commit -m "Type: Description claire de la modification"
-```
+## Authentification (pour éviter les malentendus)
 
-**Types de commits :**
-- `feat:` Nouvelle fonctionnalité
-- `fix:` Correction de bug
-- `docs:` Documentation
-- `style:` Formatage, style
-- `refactor:` Refactorisation
-- `test:` Tests
-- `chore:` Maintenance
+La documentation utilisateur parle d’un **jeton** après connexion : le serveur renvoie en pratique l’**identifiant utilisateur** sous forme de chaîne, stocké côté client et renvoyé dans `Authorization: Bearer …`. Ce n’est **pas** un JWT signé. Toute évolution vers de vrais JWT devrait mettre à jour à la fois le code et la doc.
 
-#### 4. Push
-```bash
-git push origin feature/nom-de-votre-fonctionnalite
-```
+## Standards de code
 
-#### 5. Pull Request
-- Créer une Pull Request sur GitHub
-- Décrire clairement les modifications
-- Attendre la review
+- **JavaScript** : noms explicites, indentation cohérente avec le fichier modifié (souvent 2 ou 4 espaces selon les modules), commentaires ciblés pour la logique non triviale.
+- **CSS** : suivre les **conventions déjà présentes** dans [public/styles.css](public/styles.css) et l’interface existante ; le projet n’impose pas strictement BEM partout.
+- **HTML** : structure sémantique ; attributs d’accessibilité (`aria-*`) lorsque c’est pertinent.
 
-### 📝 Standards de code
+## Tests
 
-#### JavaScript
-- Utiliser des noms de variables explicites
-- Commenter les fonctions complexes
-- Respecter l'indentation (2 espaces)
+Il n’y a **pas de suite de tests automatisés** documentée dans ce dépôt. Avant une pull request, prévoir au minimum des **tests manuels** :
 
-#### CSS
-- Utiliser les variables CSS définies
-- Organiser les styles par composant
-- Utiliser des noms de classes BEM
+- Connexion / déconnexion (admin et, si touché, compte **élève** / borne CDI).
+- Création d’une feuille d’appel et mise à jour des présences.
+- Export PDF (jsPDF ; connexion ou bundle local selon l’environnement).
+- Si vous modifiez le CDI ou la sécurité IP : page `cdi-kiosk.html` et réglages administration associés.
 
-#### HTML
-- Utiliser une structure sémantique
-- Ajouter des attributs `aria-` pour l'accessibilité
-- Valider le HTML
+## Processus Git
 
-### 🧪 Tests
+### Avant de commencer
 
-Avant de soumettre une PR :
-- Tester manuellement les fonctionnalités
-- Vérifier que l'application se lance correctement
-- Tester sur différents navigateurs (si applicable)
+1. **Fork** du dépôt (si contribution externe) ou branche depuis `main`.
+2. **Branche dédiée** : `git checkout -b feature/nom-court`.
 
-### 📋 Checklist avant soumission
+### Commits
 
-- [ ] Code testé et fonctionnel
-- [ ] Pas d'erreurs de linting
-- [ ] Documentation mise à jour si nécessaire
-- [ ] Commit message descriptif
-- [ ] Branche à jour avec `main`
+Préfixer le message par un type lisible, par exemple :
 
-### 🐛 Signaler un bug
+- `feat:` nouvelle fonctionnalité  
+- `fix:` correction de bug  
+- `docs:` documentation  
+- `style:` formatage  
+- `refactor:` refactorisation  
+- `test:` tests  
+- `chore:` maintenance  
 
-Utiliser le template d'issue GitHub :
-- Description du problème
-- Étapes pour reproduire
-- Comportement attendu vs réel
-- Captures d'écran si applicable
+### Pull Request
 
-### 💡 Proposer une fonctionnalité
+1. `git push origin feature/nom-court`
+2. Ouvrir une PR avec une description claire (contexte, fichiers impactés, comment tester).
+3. Mettre à jour **README** / **DEPLOYMENT** / **CONTRIBUTING** si le comportement utilisateur ou le déploiement change.
 
-- Décrire le besoin
-- Expliquer la solution proposée
-- Discuter de l'implémentation
-- Considérer les impacts sur l'existant
+## Checklist avant soumission
 
-Merci de contribuer à PERMAPPEL ! 🎉
+- [ ] Changements testés manuellement (scénarios ci-dessus selon la portée).
+- [ ] Pas d’erreurs évidentes de lint dans les fichiers modifiés.
+- [ ] Documentation mise à jour si le comportement ou les chemins changent.
+- [ ] Messages de commit explicites.
+- [ ] Branche à jour avec la branche principale du dépôt cible.
+
+## Signaler un bug ou proposer une évolution
+
+- **Bug** : description, étapes pour reproduire, comportement attendu vs observé, captures si utile.
+- **Fonctionnalité** : besoin utilisateur, proposition de solution, impacts sur l’existant.
+
+Merci de contribuer à PERMAPPEL.

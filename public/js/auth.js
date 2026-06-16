@@ -41,6 +41,13 @@ async function handleLogin(e) {
             console.log('Données utilisateur reçues:', data.user);
             localStorage.setItem('token', data.token);
             window.currentUser = data.user;
+
+            // Les élèves n'ont accès qu'à la borne CDI
+            if (data.user?.role === 'eleve') {
+                window.location.href = 'cdi-kiosk.html';
+                return;
+            }
+
             showMainPage();
             hideError();
         } else {
@@ -83,6 +90,13 @@ async function checkAuthStatus() {
             const data = await response.json();
             console.log('Utilisateur vérifié:', data.user);
             window.currentUser = data.user;
+
+            // Les élèves n'ont accès qu'à la borne CDI
+            if (data.user?.role === 'eleve') {
+                window.location.href = 'cdi-kiosk.html';
+                return;
+            }
+
             showMainPage();
         } else {
             localStorage.removeItem('token');
@@ -109,6 +123,12 @@ function showMainPage() {
     const mainPage = document.getElementById('mainPage');
     const userName = document.getElementById('userName');
     
+    // Double sécurité: ne jamais afficher l'interface principale aux élèves
+    if (window.currentUser?.role === 'eleve') {
+        window.location.href = 'cdi-kiosk.html';
+        return;
+    }
+
     if (loginPage) loginPage.classList.remove('active');
     if (mainPage) mainPage.classList.add('active');
     

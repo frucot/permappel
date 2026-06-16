@@ -1,7 +1,37 @@
 const express = require('express');
 const router = express.Router();
+const createCdiKioskIpHelpers = require('../middleware/cdiKioskIpRestriction');
 
 module.exports = (db) => {
+    const { enforceKioskIPRestriction } = createCdiKioskIpHelpers(db);
+
+    // Autocomplete pour la borne CDI (même restriction IP que /cdi/checkin si activée)
+    router.get('/autocomplete', enforceKioskIPRestriction, async (req, res) => {
+        try {
+            const query = (req.query.q || '').trim();
+            if (query.length < 1) {
+                return res.json({ success: true, students: [] });
+            }
+
+            const students = await db.executeQuery(`
+                SELECT id, nom, prenom, classe
+                FROM eleves
+                WHERE actif = 1
+                AND (nom LIKE ? OR prenom LIKE ?)
+                ORDER BY nom ASC, prenom ASC
+                LIMIT 20
+            `, [`${query}%`, `${query}%`]);
+
+            res.json({ success: true, students });
+        } catch (error) {
+            console.error('Erreur autocomplete élèves:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Erreur serveur'
+            });
+        }
+    });
+
     // Obtenir tous les élèves
     router.get('/', async (req, res) => {
         try {

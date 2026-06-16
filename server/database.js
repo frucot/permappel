@@ -159,22 +159,18 @@ class DatabaseManager {
                 } catch (error) {
                     console.warn('⚠️ Impossible de vérifier/corriger les permissions de la base de données:', error.message);
                 }
-                
-                this.setupDatabase();
-            }
-        });
 
-        // Configuration pour éviter les conflits
-        this.db.serialize(() => {
-            // Activer WAL mode pour de meilleures performances concurrentes
-            this.db.run("PRAGMA journal_mode = WAL");
-            // Augmenter le timeout pour éviter les locks
-            this.db.run("PRAGMA busy_timeout = 30000");
-            // Activer les foreign keys
-            this.db.run("PRAGMA foreign_keys = ON");
-            // Optimiser les performances
-            this.db.run("PRAGMA synchronous = NORMAL");
-            this.db.run("PRAGMA cache_size = 10000");
+                // PRAGMA puis création des tables dans une seule file d’attente : foreign_keys doit être ON
+                // avant CREATE TABLE pour que SQLite valide les REFERENCES (ordre des tables respecté dans setupDatabase).
+                this.db.serialize(() => {
+                    this.db.run('PRAGMA journal_mode = WAL');
+                    this.db.run('PRAGMA busy_timeout = 30000');
+                    this.db.run('PRAGMA foreign_keys = ON');
+                    this.db.run('PRAGMA synchronous = NORMAL');
+                    this.db.run('PRAGMA cache_size = 10000');
+                    this.setupDatabase();
+                });
+            }
         });
     }
 
@@ -260,6 +256,14 @@ class DatabaseManager {
                 UNIQUE(date, creneauId)
             );
 
+            -- Activités CDI avant presences (FK activiteCdiId -> activites_cdi)
+            CREATE TABLE IF NOT EXISTS activites_cdi (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                libelle TEXT UNIQUE NOT NULL,
+                actif INTEGER DEFAULT 1,
+                creeLe DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
             -- Table des présences individuelles
             CREATE TABLE IF NOT EXISTS presences (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -267,10 +271,12 @@ class DatabaseManager {
                 eleveId INTEGER NOT NULL,
                 statut TEXT NOT NULL DEFAULT 'NON_APPELE',
                 notes TEXT,
+                activiteCdiId INTEGER,
                 modifiePar INTEGER NOT NULL,
                 modifieLe DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (feuilleAppelId) REFERENCES feuilles_appel(id) ON DELETE CASCADE,
                 FOREIGN KEY (eleveId) REFERENCES eleves(id),
+                FOREIGN KEY (activiteCdiId) REFERENCES activites_cdi(id),
                 FOREIGN KEY (modifiePar) REFERENCES utilisateurs(id),
                 UNIQUE(feuilleAppelId, eleveId)
             );
@@ -307,6 +313,8 @@ class DatabaseManager {
 
     async insertDefaultData() {
         try {
+            await this.ensureCdiSchema();
+
             // Insérer un utilisateur admin par défaut
             const adminPassword = require('bcrypt').hashSync('admin123', 10);
             
@@ -329,9 +337,48 @@ class DatabaseManager {
                 ('Groupe A'), ('Groupe B'), ('Option Maths'), ('Option Physique')
             `);
 
+            await this.executeQuery(`
+                INSERT OR IGNORE INTO activites_cdi (libelle, actif) VALUES
+                ('Recherche', 1),
+                ('Lecture', 1),
+                ('Travail de groupe', 1),
+                ('Dessin', 1),
+                ('Devoir informatique', 1)
+            `);
+
+            await this.executeQuery(`
+                INSERT OR IGNORE INTO config (cle, valeur, description) VALUES
+                ('cdi_kiosk_ip_restriction_enabled', 'false', 'Activer la restriction IP des bornes CDI'),
+                ('cdi_kiosk_allowed_ips', '["127.0.0.1"]', 'Liste des IPs autorisées pour les bornes CDI (JSON array)')
+            `);
+
             console.log('✅ Données par défaut vérifiées');
         } catch (error) {
             console.error('Erreur insertion données par défaut:', error);
+        }
+    }
+
+    async ensureCdiSchema() {
+        try {
+            await this.executeQuery(`
+                CREATE TABLE IF NOT EXISTS activites_cdi (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    libelle TEXT UNIQUE NOT NULL,
+                    actif INTEGER DEFAULT 1,
+                    creeLe DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            const presenceColumns = await this.executeQuery(`SELECT name FROM pragma_table_info('presences')`);
+            const hasActiviteColumn = presenceColumns.some(column => column.name === 'activiteCdiId');
+
+            if (!hasActiviteColumn) {
+                await this.executeQuery(`
+                    ALTER TABLE presences ADD COLUMN activiteCdiId INTEGER
+                `);
+            }
+        } catch (error) {
+            console.error('Erreur migration schéma CDI:', error);
         }
     }
 

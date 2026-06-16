@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const DatabaseManager = require('./database');
+const { updatePresenceStatus, buildStudentStatusSocketPayload } = require('./helpers/updatePresenceStatus');
 
 class PermappelServer {
     constructor() {
@@ -293,10 +294,62 @@ class PermappelServer {
             res.sendFile(path.join(__dirname, '../public/index.html'));
         });
 
+        // Garde d'autorisation API pour les comptes eleve
+        this.app.use('/api', async (req, res, next) => {
+            try {
+                const authHeader = req.headers.authorization || '';
+                const token = authHeader.startsWith('Bearer ')
+                    ? authHeader.replace('Bearer ', '').trim()
+                    : null;
+
+                // Pas de token: conserver le comportement historique
+                if (!token) {
+                    return next();
+                }
+
+                const users = await this.db.executeQuery(
+                    'SELECT id, role, actif FROM utilisateurs WHERE id = ?',
+                    [token]
+                );
+                if (!users.length || users[0].actif !== 1) {
+                    return next();
+                }
+
+                const user = users[0];
+                if (user.role !== 'eleve') {
+                    return next();
+                }
+
+                // Routes autorisées pour les élèves (borne CDI uniquement)
+                const isAllowedRoute =
+                    req.path.startsWith('/auth/') ||
+                    req.path === '/auth' ||
+                    req.path.startsWith('/cdi/') ||
+                    req.path === '/cdi' ||
+                    req.path === '/students/autocomplete';
+
+                if (!isAllowedRoute) {
+                    return res.status(403).json({
+                        success: false,
+                        message: 'Accès refusé: permissions insuffisantes pour ce rôle'
+                    });
+                }
+
+                next();
+            } catch (error) {
+                console.error('Erreur garde permissions API eleve:', error);
+                return res.status(500).json({
+                    success: false,
+                    message: 'Erreur serveur'
+                });
+            }
+        });
+
         // API Routes
         this.app.use('/api/auth', require('./routes/auth')(this.db));
         this.app.use('/api/students', require('./routes/students')(this.db));
         this.app.use('/api/attendance', require('./routes/attendance')(this.db, this.io));
+        this.app.use('/api/cdi', require('./routes/cdi')(this.db, this.io));
         this.app.use('/api/schedules', require('./routes/schedules')(this.db));
         this.app.use('/api/admin', require('./routes/admin')(this.db, this));
         this.app.use('/api/export', require('./routes/export')(this.db));
@@ -422,37 +475,42 @@ class PermappelServer {
                 this.broadcastAttendanceUsers(attendanceId);
             });
 
-            // Synchronisation des changements d'appel
+            // Synchronisation des changements d'appel (même logique SQL que PUT /api/attendance/.../student/...)
             socket.on('attendance-change', async (data) => {
                 if (!socket.userId) return;
-                
+
                 try {
-                    const { attendanceId, studentId, status, notes } = data;
-                    
-                    // Mettre à jour en base avec gestion des conflits
-                    const result = await this.updateAttendanceStatus(
-                        attendanceId, studentId, status, notes, socket.userId
-                    );
-                    
-                    if (result.success) {
-                        // Diffuser le changement à tous les utilisateurs de cet appel
-                        this.io.to(`attendance-${attendanceId}`).emit('attendance-updated', {
-                            studentId,
-                            status,
-                            notes,
-                            modifiedBy: socket.userId,
-                            modifiedAt: new Date(),
-                            version: result.version
-                        });
+                    const { attendanceId, studentId, status, notes, activityId } = data || {};
+                    const result = await updatePresenceStatus(this.db, {
+                        attendanceId,
+                        studentId,
+                        status,
+                        notes,
+                        activityId,
+                        userId: socket.userId
+                    });
+
+                    if (result.ok) {
+                        this.io
+                            .to(`attendance-${attendanceId}`)
+                            .emit(
+                                'student-status-updated',
+                                buildStudentStatusSocketPayload(
+                                    attendanceId,
+                                    result.studentId,
+                                    status,
+                                    notes
+                                )
+                            );
                     } else {
-                        socket.emit('attendance-error', { 
-                            message: 'Conflit détecté, veuillez recharger' 
+                        socket.emit('attendance-error', {
+                            message: result.message || 'Mise à jour impossible'
                         });
                     }
                 } catch (error) {
                     console.error('Erreur mise à jour appel:', error);
-                    socket.emit('attendance-error', { 
-                        message: 'Erreur lors de la mise à jour' 
+                    socket.emit('attendance-error', {
+                        message: "Erreur lors de la mise à jour"
                     });
                 }
             });
@@ -503,22 +561,6 @@ class PermappelServer {
         } catch (error) {
             console.error('Erreur authentification:', error);
             return null;
-        }
-    }
-
-    async updateAttendanceStatus(attendanceId, studentId, status, notes, userId) {
-        try {
-            // Utiliser une transaction pour éviter les conflits
-            const result = await this.db.executeWithRetry(`
-                UPDATE appels 
-                SET statut = ?, notes = ?, modifiePar = ?, modifieLe = CURRENT_TIMESTAMP, version = version + 1
-                WHERE id = ? AND eleveId = ?
-            `, [status, notes, userId, attendanceId, studentId]);
-
-            return { success: true, version: result.changes };
-        } catch (error) {
-            console.error('Erreur mise à jour statut:', error);
-            return { success: false, error: error.message };
         }
     }
 

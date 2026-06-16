@@ -1,5 +1,10 @@
 const express = require('express');
 const router = express.Router();
+const {
+    parseBearerUserId,
+    updatePresenceStatus,
+    buildStudentStatusSocketPayload
+} = require('../helpers/updatePresenceStatus');
 
 module.exports = (db, io) => {
     // GET /api/attendance - Récupérer toutes les feuilles d'appel
@@ -114,9 +119,11 @@ module.exports = (db, io) => {
                     e.classe as class,
                     e.regime,
                     e.autorisationSortie as exitPermissions,
+                    ac.libelle as activiteCdi,
                     GROUP_CONCAT(g.nom) as groups
                 FROM presences p
                 JOIN eleves e ON p.eleveId = e.id
+                LEFT JOIN activites_cdi ac ON ac.id = p.activiteCdiId
                 LEFT JOIN eleves_groupes eg ON e.id = eg.eleveId
                 LEFT JOIN groupes g ON eg.groupeId = g.id
                 WHERE p.feuilleAppelId = ?
@@ -173,6 +180,7 @@ module.exports = (db, io) => {
                 autorisationSortie: student.exitPermissions,
                 status: student.statut || 'NON_APPELE',
                 statut: student.statut || 'NON_APPELE',
+                activiteCdi: student.activiteCdi || null,
                 groups: student.groups ? student.groups.split(',').filter(g => g) : []
             }));
             
@@ -262,9 +270,9 @@ module.exports = (db, io) => {
             
             // Si aucune condition, récupérer tous les élèves actifs
             if (conditions.length === 0) {
-                elevesQuery += ' AND e.actif = 1';
+                elevesQuery += ' AND COALESCE(e.actif, 1) = 1';
             } else {
-                elevesQuery += ' AND (' + conditions.join(' OR ') + ') AND e.actif = 1';
+                elevesQuery += ' AND (' + conditions.join(' OR ') + ') AND COALESCE(e.actif, 1) = 1';
             }
             
             console.log('🔍 Requête élèves:', elevesQuery);
@@ -333,36 +341,42 @@ module.exports = (db, io) => {
     router.put('/:attendanceId/student/:studentId', async (req, res) => {
         try {
             const { attendanceId, studentId } = req.params;
-            const { status, notes } = req.body;
-            const [date, creneauId] = attendanceId.split('_');
-            
-            // Récupérer la feuille d'appel
-            const feuille = await db.executeQuery(
-                'SELECT id FROM feuilles_appel WHERE date = ? AND creneauId = ?',
-                [date, creneauId]
-            );
-            
-            if (feuille.length === 0) {
-                return res.status(404).json({ success: false, message: 'Feuille d\'appel non trouvée' });
+            const { status, notes, activityId } = req.body;
+            const userId = parseBearerUserId(req);
+            if (userId == null) {
+                return res.status(401).json({ success: false, message: 'Authentification requise' });
             }
-            
-            // Mettre à jour la présence
-            await db.executeQuery(`
-                UPDATE presences 
-                SET statut = ?, notes = ?, modifieLe = CURRENT_TIMESTAMP, modifiePar = ?
-                WHERE feuilleAppelId = ? AND eleveId = ?
-            `, [status, notes, 1, feuille[0].id, studentId]);
-            
-            // Émettre la mise à jour via Socket.IO
+
+            const result = await updatePresenceStatus(db, {
+                attendanceId,
+                studentId,
+                status,
+                notes,
+                activityId,
+                userId
+            });
+
+            if (!result.ok) {
+                const statusByCode = {
+                    FEUILLE_NOT_FOUND: 404,
+                    NO_ROW_UPDATED: 400,
+                    INVALID_ATTENDANCE_ID: 400,
+                    INVALID_STUDENT: 400,
+                    INVALID_STATUS: 400,
+                    INVALID_USER: 401,
+                    DB_ERROR: 500
+                };
+                const httpStatus = statusByCode[result.code] || 400;
+                return res.status(httpStatus).json({ success: false, message: result.message });
+            }
+
             if (io) {
-                io.to(`attendance-${attendanceId}`).emit('student-status-updated', {
-                    studentId: parseInt(studentId),
-                    status: status,
-                    notes: notes,
-                    timestamp: new Date().toISOString()
-                });
+                io.to(`attendance-${attendanceId}`).emit(
+                    'student-status-updated',
+                    buildStudentStatusSocketPayload(attendanceId, result.studentId, status, notes)
+                );
             }
-            
+
             res.json({ success: true, message: 'Statut mis à jour' });
         } catch (error) {
             console.error('Erreur mise à jour statut:', error);
@@ -468,6 +482,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'groups-added'
+                });
+            }
         } catch (error) {
             console.error('Erreur ajout groupes:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -585,6 +606,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'group-removed'
+                });
+            }
         } catch (error) {
             console.error('Erreur suppression groupe:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur: ' + error.message });
@@ -687,6 +715,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'classes-added'
+                });
+            }
         } catch (error) {
             console.error('Erreur ajout classes:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur' });
@@ -801,6 +836,13 @@ module.exports = (db, io) => {
                     }))
                 }
             });
+
+            if (io) {
+                io.to(`attendance-${attendanceId}`).emit('attendance-students-updated', {
+                    attendanceId,
+                    reason: 'class-removed'
+                });
+            }
         } catch (error) {
             console.error('Erreur suppression classe:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur: ' + error.message });
@@ -835,21 +877,29 @@ module.exports = (db, io) => {
             const existingStudentIds = new Set(existingPresences.map(p => p.eleveId));
             
             // Récupérer TOUS les élèves correspondant aux critères (y compris les nouveaux)
-            let elevesQuery = 'SELECT * FROM eleves WHERE actif = 1';
+            // IMPORTANT: la création de feuille d'appel utilise une union (OR) entre classes et groupes.
+            // La synchronisation doit reproduire la même logique, sinon on supprime des élèves
+            // qui étaient valides lors de la création d'origine.
+            let elevesQuery = 'SELECT * FROM eleves WHERE COALESCE(actif, 1) = 1';
             const elevesParams = [];
-            
+            const orConditions = [];
+
             if (classes.length > 0) {
-                elevesQuery += ' AND classe IN (' + classes.map(() => '?').join(',') + ')';
+                orConditions.push('classe IN (' + classes.map(() => '?').join(',') + ')');
                 elevesParams.push(...classes);
             }
-            
+
             if (groups.length > 0) {
-                elevesQuery += ` AND id IN (
+                orConditions.push(`id IN (
                     SELECT DISTINCT eleveId FROM eleves_groupes eg
                     JOIN groupes g ON eg.groupeId = g.id
                     WHERE g.nom IN (${groups.map(() => '?').join(',')})
-                )`;
+                )`);
                 elevesParams.push(...groups);
+            }
+
+            if (orConditions.length > 0) {
+                elevesQuery += ' AND (' + orConditions.join(' OR ') + ')';
             }
             
             const allEligibleStudents = await db.executeQuery(elevesQuery, elevesParams);
@@ -909,6 +959,15 @@ module.exports = (db, io) => {
                 removedCount: removedCount,
                 totalStudents: finalTotal
             });
+
+            if (io && (addedCount > 0 || removedCount > 0)) {
+                io.to(`attendance-${id}`).emit('attendance-students-updated', {
+                    attendanceId: id,
+                    reason: 'sync-students',
+                    addedCount,
+                    removedCount
+                });
+            }
         } catch (error) {
             console.error('Erreur lors de la synchronisation des élèves:', error);
             res.status(500).json({ success: false, message: 'Erreur serveur lors de la synchronisation' });
