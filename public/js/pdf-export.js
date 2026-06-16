@@ -297,21 +297,9 @@ function generateAttendancePDF(attendances, establishmentInfo, date) {
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 20;
-    const contentWidth = pageWidth - (2 * margin);
     
-    let currentPage = 1;
-    let totalPages = 0;
-    
-    attendances.forEach(attendance => {
-        if (attendance.students && attendance.students.length > 0) {
-            const studentsPerPage = Math.floor((pageHeight - 200) / 12);
-            const pagesForThisAttendance = Math.ceil(attendance.students.length / studentsPerPage);
-            totalPages += pagesForThisAttendance;
-        } else {
-            totalPages += 1;
-        }
-    });
-    
+    // 1. SUPPRESSION de la boucle de pré-calcul de totalPages (Devenue inutile !)
+
     function addHeader(scheduleName, scheduleTime, attendance) {
         doc.setFontSize(9);
         doc.setFont(undefined, 'bold');
@@ -338,10 +326,7 @@ function generateAttendancePDF(attendances, establishmentInfo, date) {
             doc.text(statsText, margin, 43);
         }
         
-        // Ligne de séparation sera ajoutée après le tableau
-        
-        doc.setFontSize(10);
-        doc.text(`Page ${currentPage}/${totalPages}`, pageWidth - margin - 30, 30);
+        // Le numéro de page a été retiré d'ici, il sera ajouté à la fin.
     }
     
     function addStudentTable(students, attendance) {
@@ -357,7 +342,6 @@ function generateAttendancePDF(attendances, establishmentInfo, date) {
             
             if (pageStart > 0) {
                 doc.addPage();
-                currentPage++;
                 addHeader(attendance.schedule?.name || 'Créneau', 
                          `${attendance.schedule?.startTime || ''} - ${attendance.schedule?.endTime || ''}`, attendance);
             }
@@ -414,7 +398,6 @@ function generateAttendancePDF(attendances, establishmentInfo, date) {
     attendances.forEach((attendance, index) => {
         if (index > 0) {
             doc.addPage();
-            currentPage++;
         }
         
         const scheduleName = attendance.schedule?.name || 'Créneau';
@@ -431,6 +414,15 @@ function generateAttendancePDF(attendances, establishmentInfo, date) {
         
         addFooter();
     });
+    
+    // 2. DEUXIÈME PASSE : Marquage de la pagination réelle et infaillible
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Page ${i}/${totalPages}`, pageWidth - margin - 30, 30);
+    }
     
     let fileName;
     if (attendances.length === 1) {
@@ -453,21 +445,9 @@ function generateCustomAttendancePDF(attendances, establishmentInfo, startDate, 
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 20;
-    const contentWidth = pageWidth - (2 * margin);
     
-    let currentPage = 1;
-    let totalPages = 0;
-    
-    attendances.forEach(attendance => {
-        if (attendance.students && attendance.students.length > 0) {
-            const studentsPerPage = Math.floor((pageHeight - 200) / 12);
-            const pagesForThisAttendance = Math.ceil(attendance.students.length / studentsPerPage);
-            totalPages += pagesForThisAttendance;
-        } else {
-            totalPages += 1;
-        }
-    });
-    
+    // 1. SUPPRESSION de la boucle de pré-calcul de totalPages
+
     function addHeader(scheduleName, scheduleTime, attendance) {
         doc.setFontSize(9);
         doc.setFont(undefined, 'bold');
@@ -480,10 +460,10 @@ function generateCustomAttendancePDF(attendances, establishmentInfo, startDate, 
         
         doc.setFontSize(8);
         doc.setFont(undefined, 'bold');
-        doc.text('Feuilles de présence du :', margin, 32);
-        doc.text(formatDateForPDF(startDate), margin + 50, 32);
-        doc.text('au', margin + 80, 32);
-        doc.text(formatDateForPDF(endDate), margin + 90, 32);
+        
+        // CORRECTION DE LA DATE : On affiche désormais la date spécifique de la feuille en cours !
+        doc.text('Feuille de présence du :', margin, 32);
+        doc.text(formatDateForPDF(attendance?.date || startDate), margin + 50, 32);
         
         doc.setFontSize(7);
         doc.setFont(undefined, 'normal');
@@ -495,11 +475,6 @@ function generateCustomAttendancePDF(attendances, establishmentInfo, startDate, 
             doc.setFontSize(6);
             doc.text(statsText, margin, 43);
         }
-        
-        // Ligne de séparation sera ajoutée après le tableau
-        
-        doc.setFontSize(10);
-        doc.text(`Page ${currentPage}/${totalPages}`, pageWidth - margin - 30, 30);
     }
     
     function addStudentTable(students, attendance) {
@@ -515,7 +490,6 @@ function generateCustomAttendancePDF(attendances, establishmentInfo, startDate, 
             
             if (pageStart > 0) {
                 doc.addPage();
-                currentPage++;
                 addHeader(attendance.schedule?.name || 'Créneau', 
                          `${attendance.schedule?.startTime || ''} - ${attendance.schedule?.endTime || ''}`, attendance);
             }
@@ -572,7 +546,6 @@ function generateCustomAttendancePDF(attendances, establishmentInfo, startDate, 
     attendances.forEach((attendance, index) => {
         if (index > 0) {
             doc.addPage();
-            currentPage++;
         }
         
         const scheduleName = attendance.schedule?.name || 'Créneau';
@@ -589,6 +562,15 @@ function generateCustomAttendancePDF(attendances, establishmentInfo, startDate, 
         
         addFooter();
     });
+    
+    // 2. DEUXIÈME PASSE : Marquage de la pagination réelle
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text(`Page ${i}/${totalPages}`, pageWidth - margin - 30, 30);
+    }
     
     const fileName = `feuilles_presence_${startDate.replace(/-/g, '_')}_au_${endDate.replace(/-/g, '_')}.pdf`;
     doc.save(fileName);
