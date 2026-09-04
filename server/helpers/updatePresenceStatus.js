@@ -2,6 +2,7 @@
  * Mise à jour d'une ligne presences pour une feuille d'appel (identifiant composite date_creneauId).
  * Partagé entre REST (PUT attendance/student) et Socket.IO (attendance-change).
  */
+const { verifyToken } = require('../lib/jwtAuth');
 
 function parseBearerUserId(req) {
     const authHeader = req.headers.authorization || '';
@@ -9,7 +10,8 @@ function parseBearerUserId(req) {
         ? authHeader.replace(/^Bearer\s+/i, '').trim()
         : null;
     if (!token) return null;
-    const id = parseInt(token, 10);
+    const decoded = verifyToken(token);
+    const id = decoded?.id;
     return Number.isFinite(id) ? id : null;
 }
 

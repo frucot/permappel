@@ -1,6 +1,6 @@
 const path = require('path');
 const sqlite3 = require('./server/node_modules/sqlite3').verbose();
-const bcrypt = require('./server/node_modules/bcrypt');
+const bcrypt = require('bcryptjs');
 const os = require('os');
 const fs = require('fs');
 
@@ -10,7 +10,7 @@ let sharedDataPath;
 if (process.platform === 'win32') {
     sharedDataPath = path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'PERMAPPEL');
 } else if (process.platform === 'darwin') {
-    sharedDataPath = '/Library/Application Support/PERMAPPEL';
+    sharedDataPath = path.join(os.homedir(), 'Library', 'Application Support', 'PERMAPPEL');
 } else {
     sharedDataPath = '/opt/PERMAPPEL';
 }

@@ -13,8 +13,8 @@ class DatabaseManager {
             // Windows : utiliser ProgramData pour un accès partagé
             sharedDataPath = path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'PERMAPPEL');
         } else if (process.platform === 'darwin') {
-            // macOS : utiliser /Library/Application Support
-            sharedDataPath = '/Library/Application Support/PERMAPPEL';
+            // macOS : utiliser le dossier utilisateur pour éviter les droits admin
+            sharedDataPath = path.join(os.homedir(), 'Library', 'Application Support', 'PERMAPPEL');
         } else {
             // Linux : utiliser /opt ou /var/lib
             sharedDataPath = '/opt/PERMAPPEL';
@@ -316,7 +316,7 @@ class DatabaseManager {
             await this.ensureCdiSchema();
 
             // Insérer un utilisateur admin par défaut
-            const adminPassword = require('bcrypt').hashSync('admin123', 10);
+            const adminPassword = require('bcryptjs').hashSync('admin123', 10);
             
             await this.executeQuery(`
                 INSERT OR IGNORE INTO utilisateurs 
@@ -400,7 +400,8 @@ class DatabaseManager {
 
     executeQuery(query, params = []) {
         return new Promise((resolve, reject) => {
-            if (query.trim().toUpperCase().startsWith('SELECT')) {
+            const isReadQuery = /^\s*(SELECT|WITH|PRAGMA)/i.test(query);
+            if (isReadQuery) {
                 this.db.all(query, params, (err, rows) => {
                     if (err) reject(err);
                     else resolve(rows);
@@ -430,13 +431,18 @@ class DatabaseManager {
             }
         }
 
-        this.db.backup(backupPath, (err) => {
-            if (err) {
-                console.error('Erreur sauvegarde:', err);
-            } else {
+        this.db.run('PRAGMA wal_checkpoint(FULL)', async (checkpointErr) => {
+            if (checkpointErr) {
+                console.warn('⚠️ Échec checkpoint WAL avant sauvegarde:', checkpointErr.message);
+            }
+
+            try {
+                await fs.promises.copyFile(this.dbPath, backupPath);
                 console.log(`✅ Sauvegarde créée: ${backupPath}`);
                 // Nettoyer les anciennes sauvegardes après chaque nouvelle sauvegarde
                 this.cleanOldBackups(backupDir);
+            } catch (copyError) {
+                console.error('Erreur sauvegarde:', copyError);
             }
         });
     }

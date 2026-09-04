@@ -84,7 +84,7 @@ Préfixe **`/api`** :
 
 | Chemin | Module | Rôle principal |
 |--------|--------|----------------|
-| `/api/auth` | `routes/auth.js` | Login, `/me` ; token = **id utilisateur** (chaîne), pas un JWT |
+| `/api/auth` | `routes/auth.js` | Login, `/me` ; token **JWT signé** (payload id/role, expiration 12h) |
 | `/api/students` | `routes/students.js` | CRUD élèves, import lié, autocomplete |
 | `/api/attendance` | `routes/attendance.js` | Feuilles d’appel, présences ; reçoit `io` pour émissions |
 | `/api/cdi` | `routes/cdi.js` | Borne CDI : créneau, activités, check-in, statut IP borne |
@@ -93,12 +93,12 @@ Préfixe **`/api`** :
 | `/api/export` | `routes/export.js` | Exports côté serveur si présents |
 | `/api/import` | `routes/import.js` | Import fichiers (uploads sous répertoire partagé) |
 
-**Garde « élève »** (middleware avant ces routes) : si `Authorization: Bearer <token>` correspond à un utilisateur avec `role === 'eleve'`, seules certaines sous-routes sont autorisées (`/auth/*`, `/cdi/*`, `/students/autocomplete`). Toute autre API renvoie **403**.
+**Garde « élève »** (middleware avant ces routes) : si `Authorization: Bearer <token>` contient un JWT valide dont l’utilisateur a `role === 'eleve'`, seules certaines sous-routes sont autorisées (`/auth/*`, `/cdi/*`, `/students/autocomplete`). Toute autre API renvoie **403**.
 
 ### 3.3 Socket.IO
 
 - **Middleware** : même logique IP que HTTP si la restriction globale est active.
-- **Événements typiques** : `authenticate` (token = id user), `join-attendance` / `leave-attendance`, `attendance-change`, messages de chat, etc.
+- **Événements typiques** : `authenticate` (token JWT), `join-attendance` / `leave-attendance`, `attendance-change`, messages de chat, etc.
 - Les clients rejoignent des **rooms** `attendance-{id}` pour isoler les diffusions par feuille.
 
 Pour la liste exacte des événements, parcourir `setupSocketHandlers()` dans `server.js` et les fichiers qui appellent `io.emit` / `socket.to(...).emit` (ex. `routes/attendance.js`, `routes/cdi.js`).
@@ -140,9 +140,12 @@ L’**export PDF** des feuilles est réalisé **côté client** avec **jsPDF** (
 
 ## 7. Authentification (implémentation actuelle)
 
-- **Login** : `POST /api/auth/login` — bcrypt compare le mot de passe ; réponse `{ token, user }` où **`token` est l’id numérique de l’utilisateur en string**.
+- **Login** : `POST /api/auth/login` — `bcryptjs` compare le mot de passe ; réponse `{ token, user }` où **`token` est un JWT signé**.
 - **Requêtes suivantes** : header `Authorization: Bearer <token>`.
-- Ce n’est **pas** un JWT : pas de signature, pas d’expiration côté token. Toute évolution vers JWT impliquerait de modifier `auth.js`, le middleware élève, et la doc.
+- Le JWT contient `id` et `role`, et expire au bout de **12h**.
+- Priorité de secret JWT (prod) : `process.env.JWT_SECRET` > `config.jwt_secret` (SQLite) > génération automatique + persistance dans `config`.
+- Au premier démarrage sans variable d’environnement, l’application génère un secret fort et l’enregistre dans la base (clé `jwt_secret`).
+- Le changement de secret (variable env ou valeur DB) invalide les sessions JWT existantes : reconnexion requise.
 
 ---
 
@@ -194,7 +197,7 @@ Les noms d’événements ci-dessous sont ceux utilisés dans **`server/server.j
 
 | Événement | Payload typique | Comportement |
 |-----------|-----------------|--------------|
-| `authenticate` | `{ token }` — `token` = id utilisateur (string), comme après login HTTP | Vérifie l’utilisateur en BDD ; en cas de succès : enregistre `socket.userId` / `socket.userName`, répond `authenticated`, met à jour la liste globale des connectés. |
+| `authenticate` | `{ token }` — `token` = JWT, comme après login HTTP | Vérifie la signature JWT puis l’utilisateur en BDD ; en cas de succès : enregistre `socket.userId` / `socket.userName`, répond `authenticated`, met à jour la liste globale des connectés. |
 | `join-attendance` | `{ attendanceId }` | `socket.join('attendance-' + attendanceId)` ; enregistre l’utilisateur dans `activeAttendances` ; émet `user-joined-attendance` aux autres ; puis `attendance-users-updated` à la room. |
 | `leave-attendance` | `{ attendanceId }` **ou** l’id seul (nombre / string) | `socket.leave` ; retire l’utilisateur de `activeAttendances` ; `user-left-attendance` ; `attendance-users-updated`. |
 | `attendance-change` | `{ attendanceId, studentId, status, notes?, activityId? }` | Met à jour `presences` via [`server/helpers/updatePresenceStatus.js`](server/helpers/updatePresenceStatus.js) (même SQL que le `PUT` REST) avec `modifiePar = socket.userId` ; en cas de succès : **`student-status-updated`** vers la room ; sinon `attendance-error` au socket émetteur. |
@@ -244,7 +247,7 @@ Sauf mention, les routes attendent un client authentifié côté UI ; le serveur
 
 | Méthode | Chemin | Rôle |
 |---------|--------|------|
-| POST | `/api/auth/login` | Login ; corps JSON credentials ; réponse avec `token` (id user) |
+| POST | `/api/auth/login` | Login ; corps JSON credentials ; réponse avec `token` (JWT) |
 | GET | `/api/auth/me` | Profil utilisateur courant (header `Authorization`) |
 
 ### 13.3 `/api/students` — `routes/students.js`

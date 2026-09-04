@@ -8,10 +8,11 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
-    "bcrypt": "latest",
+    "bcryptjs": "latest",
     "cors": "latest",
     "csv-parser": "^3.2.0",
     "express": "latest",
+    "jsonwebtoken": "latest",
     "multer": "^2.0.2",
     "puppeteer": "latest",
     "socket.io": "latest",

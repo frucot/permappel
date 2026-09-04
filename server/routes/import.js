@@ -14,8 +14,8 @@ if (process.platform === 'win32') {
     // Windows : utiliser ProgramData pour un accès partagé
     uploadsPath = path.join(process.env.PROGRAMDATA || 'C:\\ProgramData', 'PERMAPPEL', 'uploads');
 } else if (process.platform === 'darwin') {
-    // macOS : utiliser /Library/Application Support
-    uploadsPath = '/Library/Application Support/PERMAPPEL/uploads';
+    // macOS : utiliser le dossier utilisateur pour éviter les droits admin
+    uploadsPath = path.join(os.homedir(), 'Library', 'Application Support', 'PERMAPPEL', 'uploads');
 } else {
     // Linux : utiliser /opt ou /var/lib
     uploadsPath = '/opt/PERMAPPEL/uploads';

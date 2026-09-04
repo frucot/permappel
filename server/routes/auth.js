@@ -1,5 +1,6 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
+const { signToken, verifyToken, DUMMY_BCRYPT_HASH } = require('../lib/jwtAuth');
 const router = express.Router();
 
 module.exports = (db) => {
@@ -22,6 +23,7 @@ module.exports = (db) => {
             );
 
             if (users.length === 0) {
+                await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
                 return res.status(401).json({ 
                     success: false, 
                     message: 'Identifiants invalides' 
@@ -46,7 +48,7 @@ module.exports = (db) => {
             res.json({
                 success: true,
                 user: userInfo,
-                token: user.id.toString() // Token simple basé sur l'ID
+                token: signToken(userInfo)
             });
 
         } catch (error) {
@@ -70,9 +72,17 @@ module.exports = (db) => {
                 });
             }
 
+            const decoded = verifyToken(token);
+            if (!decoded || !decoded.id) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Token invalide'
+                });
+            }
+
             const users = await db.executeQuery(
                 'SELECT id, nomUtilisateur, nom, prenom, email, role FROM utilisateurs WHERE id = ? AND actif = 1',
-                [token]
+                [decoded.id]
             );
 
             if (users.length === 0) {

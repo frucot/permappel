@@ -52,10 +52,8 @@ module.exports = function createCdiKioskIpHelpers(db) {
             }
 
             const clientIP = normalizeIP(
-                req.ip ||
-                req.headers['x-forwarded-for'] ||
-                req.connection?.remoteAddress ||
-                req.socket?.remoteAddress
+                req.socket?.remoteAddress ||
+                req.connection?.remoteAddress
             );
 
             if (!securityConfig.allowedIPs.includes(clientIP)) {
